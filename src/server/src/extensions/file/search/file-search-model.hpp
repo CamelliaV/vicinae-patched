@@ -43,11 +43,15 @@ public:
     return std::hash<std::filesystem::path>{}(item);
   }
 
-  ItemData createItemData(const std::filesystem::path &path) const override {
-    return ItemData{
-        .title = getLastPathComponent(path).c_str(),
-        .icon = ImageURL::fileIcon(path),
-    };
+  WidgetTag widgetTag(const std::filesystem::path &item) const override { return 1; }
+  WidgetType *createItemWidget(const std::filesystem::path &type) const override {
+    return new DefaultListItemWidget;
+  }
+  void refreshItemWidget(const std::filesystem::path &path, WidgetType *widget, int index) const override {
+    auto w = static_cast<DefaultListItemWidget *>(widget);
+    w->setIconUrl(ImageURL::fileIcon(path));
+    w->setName(getLastPathComponent(path).c_str());
+    w->setActive(false);
   }
 
 private:

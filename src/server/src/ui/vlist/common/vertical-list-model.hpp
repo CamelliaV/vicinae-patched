@@ -39,7 +39,7 @@ public:
     return new DefaultListItemWidget;
   }
 
-  virtual void refreshItemWidget(const ItemType &item, VListModel::WidgetType *widget) const final override {
+  virtual void refreshItemWidget(const ItemType &item, VListModel::WidgetType *widget, int index) const final override {
     auto w = static_cast<DefaultListItemWidget *>(widget);
     ItemData data = createItemData(item);
     w->setName(data.title);

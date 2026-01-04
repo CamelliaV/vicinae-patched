@@ -88,7 +88,7 @@ protected:
 
   WidgetType *createItemWidget(const RootItemVariant &type) const override;
 
-  void refreshItemWidget(const RootItemVariant &type, WidgetType *widget) const override;
+  void refreshItemWidget(const RootItemVariant &type, WidgetType *widget, int index) const override;
 
 private:
   static constexpr const size_t ITEM_HEIGHT = 41;

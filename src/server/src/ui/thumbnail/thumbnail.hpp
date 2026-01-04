@@ -20,6 +20,7 @@ class Thumbnail : public QWidget {
   ImageWidget *m_content = new ImageWidget(this);
   ImageWidget *m_placeholder = new ImageWidget(this);
   int m_borderRadius = 20;
+  bool m_frameVisible = true;
   bool m_clickable = false;
   QGraphicsOpacityEffect *m_opacityEffect = new QGraphicsOpacityEffect(this);
 
@@ -30,6 +31,7 @@ class Thumbnail : public QWidget {
 
 public:
   void setClickable(bool clickable);
+  void setFrameVisible(bool visible);
   void setImage(const ImageURL &url);
   void setRadius(int radius);
 
@@ -43,6 +45,9 @@ class ImagePreviewDialogWidget : public DialogContentWidget {
   Thumbnail *m_thumbnail = new Thumbnail;
   int m_padding = 20;
   double m_aspectRatio = 16 / 9.f;
+
+protected:
+  void keyPressEvent(QKeyEvent *event) override;
 
   void resizeEvent(QResizeEvent *event) override;
   QSize sizeHint() const override;

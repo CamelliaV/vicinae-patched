@@ -11,6 +11,7 @@
 #include <qlogging.h>
 #include <qmimedata.h>
 #include <qnamespace.h>
+#include <qregularexpression.h>
 #include <qsqlquery.h>
 #include <qstringview.h>
 #include <qt6keychain/keychain.h>
@@ -344,6 +345,79 @@ ClipboardSelection &ClipboardService::sanitizeSelection(ClipboardSelection &sele
   });
   std::ranges::unique(selection.offers, [](auto &&a, auto &&b) { return a.mimeType == b.mimeType; });
 
+  // Check if there's already a text/uri-list with file:// URIs - if so, skip conversion
+  bool alreadyHasFileUri = std::ranges::any_of(selection.offers, [](const auto &offer) {
+    return offer.mimeType == "text/uri-list" &&
+           QString::fromUtf8(offer.data).trimmed().startsWith("file://");
+  });
+
+  if (alreadyHasFileUri) {
+    // Already has proper file:// URI, no conversion needed
+    return selection;
+  }
+
+  // Check if we have a plain text offer that looks like an absolute file path
+  // Some screenshot tools copy the file path as plain text instead of as a URI
+  // First, find any text offer to check if it's a file path
+  QString detectedFilePath;
+  for (const auto &offer : selection.offers) {
+    if (Utils::isTextMimeType(offer.mimeType) && !offer.data.isEmpty()) {
+      QString text = QString::fromUtf8(offer.data).trimmed();
+      // Check if it looks like an absolute file path (starts with /)
+      // and doesn't already have a scheme (like file:// or http://)
+      // This makes the conversion idempotent
+      if (text.startsWith('/') && !text.contains("://")) {
+        fs::path filePath = text.toStdString();
+        std::error_code ec;
+        if (fs::exists(filePath, ec) && fs::is_regular_file(filePath, ec)) {
+          detectedFilePath = text;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!detectedFilePath.isEmpty()) {
+    QString fileUri = QString("file://%1").arg(detectedFilePath);
+
+    // Update ALL text offers to contain the URI
+    for (auto &offer : selection.offers) {
+      if (Utils::isTextMimeType(offer.mimeType)) {
+        offer.data = fileUri.toUtf8();
+      }
+    }
+
+    // Add text/uri-list offer
+    ClipboardDataOffer uriOffer;
+    uriOffer.mimeType = "text/uri-list";
+    uriOffer.data = fileUri.toUtf8();
+    selection.offers.push_back(uriOffer);
+
+    // Check if this is an image file and add actual image data
+    // This allows apps like Notion to receive the image directly
+    QMimeDatabase mimeDb;
+    QMimeType mimeType = mimeDb.mimeTypeForFile(detectedFilePath);
+    if (mimeType.name().startsWith("image/")) {
+      // Check if we already have image data
+      bool hasImageData = std::ranges::any_of(
+          selection.offers, [](const auto &offer) { return offer.mimeType.startsWith("image/"); });
+
+      if (!hasImageData) {
+        QFile imageFile(detectedFilePath);
+        if (imageFile.open(QIODevice::ReadOnly)) {
+          ClipboardDataOffer imageOffer;
+          imageOffer.mimeType = mimeType.name();
+          imageOffer.data = imageFile.readAll();
+          selection.offers.push_back(imageOffer);
+          qInfo() << "Added image data from file:" << detectedFilePath << "mime:" << mimeType.name()
+                  << "size:" << imageOffer.data.size();
+        }
+      }
+    }
+
+    qInfo() << "Converted plain file path to URI:" << fileUri;
+  }
+
   return selection;
 }
 
@@ -544,6 +618,17 @@ bool ClipboardService::copySelection(const ClipboardSelection &selection,
         qDebug() << "ClipboardService: Set image data with mime type" << offer.mimeType
                  << "size:" << offer.data.size();
       }
+    } else if (offer.mimeType == "text/uri-list") {
+      // Handle text/uri-list specially - set both raw data and URLs for Qt compatibility
+      mimeData->setData(offer.mimeType, offer.data);
+      QString uriData = QString::fromUtf8(offer.data).trimmed();
+      QList<QUrl> urls;
+      for (const auto &uri : uriData.split(QRegularExpression("[\r\n]+"), Qt::SkipEmptyParts)) {
+        urls.append(QUrl(uri));
+      }
+      if (!urls.isEmpty()) {
+        mimeData->setUrls(urls);
+      }
     } else {
       if (Utils::isTextMimeType(offer.mimeType)) {
         mimeData->setText(QString::fromUtf8(offer.data));
@@ -614,6 +699,133 @@ bool ClipboardService::removeAllSelections() {
   emit allSelectionsRemoved();
 
   return true;
+}
+
+QMimeData *ClipboardService::buildCompositeSelection(const std::vector<ClipboardSelection> &selections) {
+  QMimeData *composite = new QMimeData;
+  QString combinedText;
+  QString combinedHtml = "<div style=\"font-family: sans-serif;\">";
+  QStringList fileUris;  // Collect file:// URIs for text/uri-list
+  int imageCount = 0;
+  QByteArray singleImageData;
+  QString singleImageMime;
+
+  for (const auto &sel : selections) {
+    QString selectionText;
+    QString selectionHtml;
+    QByteArray selectionImageData;
+    QString selectionImageMime;
+    QString selectionFileUri;
+
+    // First pass: collect text, HTML, image content, and file URIs
+    for (const auto &offer : sel.offers) {
+      if (offer.mimeType == "text/uri-list" && !offer.data.isEmpty()) {
+        // Collect file URIs from text/uri-list
+        QString uriData = QString::fromUtf8(offer.data).trimmed();
+        for (const auto &uri : uriData.split(QRegularExpression("[\r\n]+"), Qt::SkipEmptyParts)) {
+          if (uri.startsWith("file://")) {
+            selectionFileUri = uri;
+            fileUris.append(uri);
+          }
+        }
+      } else if (Utils::isTextMimeType(offer.mimeType) && !offer.data.isEmpty()) {
+        selectionText = QString::fromUtf8(offer.data);
+      } else if (offer.mimeType == "text/html" && !offer.data.isEmpty()) {
+        selectionHtml = QString::fromUtf8(offer.data);
+      } else if (offer.mimeType.startsWith("image/") && !offer.data.isEmpty()) {
+        selectionImageData = offer.data;
+        selectionImageMime = offer.mimeType;
+      }
+    }
+
+    // Add image content to HTML
+    if (!selectionImageData.isEmpty()) {
+      QString base64 = selectionImageData.toBase64();
+      combinedHtml +=
+          QString("<img src=\"data:%1;base64,%2\" style=\"max-width:100%;\"/>").arg(selectionImageMime, base64);
+
+      // Track image count and store first image
+      imageCount++;
+      if (imageCount == 1) {
+        singleImageData = selectionImageData;
+        singleImageMime = selectionImageMime;
+      }
+    }
+
+    // Add text content (skip file:// URIs if we have a proper file URI in uri-list)
+    if (!selectionText.isEmpty() && !selectionText.startsWith("file://")) {
+      if (!combinedText.isEmpty()) { combinedText += "\n"; }
+      combinedText += selectionText;
+      combinedHtml += QString("<p>%1</p>").arg(selectionText.toHtmlEscaped());
+    } else if (!selectionHtml.isEmpty()) {
+      // If no plain text but has HTML, use HTML and try to extract text
+      combinedHtml += selectionHtml;
+      // Strip HTML tags for plain text fallback
+      QString strippedText = selectionHtml;
+      strippedText.remove(QRegularExpression("<[^>]*>"));
+      strippedText = strippedText.simplified();
+      if (!strippedText.isEmpty()) {
+        if (!combinedText.isEmpty()) { combinedText += "\n"; }
+        combinedText += strippedText;
+      }
+    }
+  }
+
+  combinedHtml += "</div>";
+
+  // Set text/uri-list with all file URIs (separated by \r\n as per RFC 2483)
+  if (!fileUris.isEmpty()) {
+    QString uriList = fileUris.join("\r\n");
+    composite->setData("text/uri-list", uriList.toUtf8());
+    // Also set URLs for Qt compatibility
+    QList<QUrl> urls;
+    for (const auto &uri : fileUris) {
+      urls.append(QUrl(uri));
+    }
+    composite->setUrls(urls);
+  }
+
+  // Set text and HTML
+  if (!combinedText.isEmpty()) {
+    composite->setText(combinedText.trimmed());
+  } else if (!fileUris.isEmpty()) {
+    // If no other text, use the file URIs as text fallback
+    composite->setText(fileUris.join("\n"));
+  }
+  composite->setHtml(combinedHtml);
+
+  // Only set raw image data if there's exactly one image and no text and one selection
+  // This forces apps like Notion to use HTML when there are multiple items
+  if (imageCount == 1 && combinedText.isEmpty() && selections.size() == 1) {
+    auto img = QImage::fromData(singleImageData);
+    if (!img.isNull()) {
+      composite->setImageData(img);
+      composite->setData(singleImageMime, singleImageData);
+    }
+  }
+
+  return composite;
+}
+
+bool ClipboardService::copyMultipleSelections(const std::vector<QString> &ids,
+                                              const Clipboard::CopyOptions &options) {
+  std::vector<ClipboardSelection> selections;
+
+  for (const auto &id : ids) {
+    if (auto sel = retrieveSelectionById(id)) {
+      qDebug() << "copyMultipleSelections: Retrieved selection" << id << "with" << sel->offers.size() << "offers";
+      for (const auto &offer : sel->offers) {
+        qDebug() << "  - offer:" << offer.mimeType << "size:" << offer.data.size();
+      }
+      selections.push_back(*sel);
+    } else {
+      qWarning() << "copyMultipleSelections: Failed to retrieve selection" << id;
+    }
+  }
+
+  if (selections.empty()) return false;
+
+  return copyQMimeData(buildCompositeSelection(selections), options);
 }
 
 AbstractClipboardServer *ClipboardService::clipboardServer() const { return m_clipboardServer.get(); }

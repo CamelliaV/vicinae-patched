@@ -1,5 +1,21 @@
 #include "thumbnail.hpp"
 
+void ImagePreviewDialogWidget::keyPressEvent(QKeyEvent *event) {
+  switch (event->key()) {
+  case Qt::Key_Escape:
+  case Qt::Key_Up:
+  case Qt::Key_Down:
+  case Qt::Key_Left:
+  case Qt::Key_Right:
+    emit closeRequested();
+    return;
+  default:
+    break;
+  }
+
+  QWidget::keyPressEvent(event);
+}
+
 void Thumbnail::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
   m_content->setFixedSize(size());
@@ -13,9 +29,11 @@ void Thumbnail::paintEvent(QPaintEvent *event) {
 
   painter.setRenderHint(QPainter::Antialiasing);
 
-  painter.setThemePen(SemanticColor::BackgroundBorder);
-  painter.setThemeBrush(SemanticColor::ListItemHoverBackground);
-  painter.drawRoundedRect(rect(), m_borderRadius, m_borderRadius);
+  if (m_frameVisible) {
+    painter.setThemePen(SemanticColor::BackgroundBorder);
+    painter.setThemeBrush(SemanticColor::ListItemHoverBackground);
+    painter.drawRoundedRect(rect(), m_borderRadius, m_borderRadius);
+  }
 
   m_opacityEffect->setOpacity(underMouse() && m_clickable ? 0.8 : 1);
 
@@ -44,6 +62,11 @@ void Thumbnail::mousePressEvent(QMouseEvent *event) {
 
 void Thumbnail::setClickable(bool clickable) {
   m_clickable = clickable;
+  update();
+}
+
+void Thumbnail::setFrameVisible(bool visible) {
+  m_frameVisible = visible;
   update();
 }
 
@@ -94,5 +117,6 @@ void ImagePreviewDialogWidget::setAspectRatio(double ratio) { m_aspectRatio = ra
 
 ImagePreviewDialogWidget::ImagePreviewDialogWidget(const ImageURL &icon) {
   setupUI();
+  m_thumbnail->setFrameVisible(false);
   m_thumbnail->setImage(icon);
 }

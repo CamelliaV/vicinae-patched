@@ -27,7 +27,7 @@ public:
   virtual std::string_view sectionName(SectionId id) const = 0;
 
   virtual WidgetType *createItemWidget(const ItemType &type) const = 0;
-  virtual void refreshItemWidget(const ItemType &type, WidgetType *widget) const = 0;
+  virtual void refreshItemWidget(const ItemType &type, WidgetType *widget, int index) const = 0;
 
   virtual StableID stableId(const ItemType &item) const = 0;
   virtual WidgetTag widgetTag(const ItemType &item) const { return InvalidTag; }
@@ -130,7 +130,7 @@ protected:
                                      static_cast<OmniListSectionHeader *>(widget)->setTitle(
                                          parseSectionName(header.name, header.count));
                                    },
-                                   [&](const SectionItem &item) { refreshItemWidget(item.data, widget); }};
+                                   [&, idx](const SectionItem &item) { refreshItemWidget(item.data, widget, idx); }};
     return std::visit(visitor, fromFlatIndex(idx));
   }
 

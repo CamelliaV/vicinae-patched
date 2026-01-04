@@ -92,7 +92,7 @@ protected:
   WidgetType *createItemWidget(const ListItemViewModel *const &type) const override {
     return new DefaultListItemWidget;
   }
-  void refreshItemWidget(const ListItemViewModel *const &type, WidgetType *widget) const override {
+  void refreshItemWidget(const ListItemViewModel *const &type, WidgetType *widget, int index) const override {
     auto w = static_cast<DefaultListItemWidget *>(widget);
     w->setName(type->title.c_str());
     w->setSubtitle(type->subtitle);
