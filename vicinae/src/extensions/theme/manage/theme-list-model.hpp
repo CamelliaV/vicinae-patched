@@ -110,7 +110,7 @@ public:
 
   WidgetType *createItemWidget(const Item &type) const override { return new ThemeItemWidget; }
 
-  void refreshItemWidget(const Item &theme, WidgetType *widget) const override {
+  void refreshItemWidget(const Item &theme, WidgetType *widget, int index) const override {
     auto item = static_cast<ThemeItemWidget *>(widget);
 
     item->setTitle(theme->name());

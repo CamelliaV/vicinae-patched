@@ -125,6 +125,17 @@ public:
   bool copyQMimeData(QMimeData *data, const Clipboard::CopyOptions &options = {});
 
   /**
+   * Copy multiple clipboard selections as a single composite selection.
+   * The selections are combined into rich HTML with images embedded as data URIs,
+   * enabling pasting to apps like Notion that support HTML.
+   * @param ids The selection IDs to copy, in the order they should appear
+   * @param options Copy options
+   * @return true if successful
+   */
+  bool copyMultipleSelections(const std::vector<QString> &ids,
+                              const Clipboard::CopyOptions &options = {});
+
+  /**
    * Whether we have a working clipboard server implementation to use.
    * This does not take into account the current monitoring preference, only
    * whether we are able to monitor.
@@ -165,6 +176,12 @@ private:
   decryptOffer(const QByteArray &data, ClipboardEncryptionType type) const;
 
   static ClipboardOfferKind getKind(const ClipboardDataOffer &offer);
+
+  /**
+   * Build a composite QMimeData from multiple selections.
+   * Combines text and HTML content, embeds images as data URIs.
+   */
+  static QMimeData *buildCompositeSelection(const std::vector<ClipboardSelection> &selections);
 
   WindowManager &m_wm;
   AppService &m_appDb;

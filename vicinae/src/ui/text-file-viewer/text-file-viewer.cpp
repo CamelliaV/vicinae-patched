@@ -32,11 +32,12 @@ void TextFileViewer::updateStyle() {
 
 TextFileViewer::TextFileViewer() : edit(new QTextEdit()) {
   setAttribute(Qt::WA_TranslucentBackground, true);
-  edit->setFocusPolicy(Qt::FocusPolicy::NoFocus);
+  edit->setFocusPolicy(Qt::FocusPolicy::ClickFocus);
   edit->document()->setDocumentMargin(10);
   edit->setTabStopDistance(40);
   edit->setReadOnly(true);
   edit->setVerticalScrollBar(new OmniScrollBar);
+  edit->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
   updateStyle();
   VStack().add(edit).imbue(this);
   connect(&ThemeService::instance(), &ThemeService::themeChanged, this, [this]() { updateStyle(); });

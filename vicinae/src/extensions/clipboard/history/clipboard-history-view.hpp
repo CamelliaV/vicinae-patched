@@ -104,10 +104,22 @@ public:
 
   void initialize() override;
   void textChanged(const QString &value) override;
+  void onDeactivate() override;
+
+  // Multi-select methods
+  void toggleMultiSelectMode();
+  void toggleItemSelection(const QString &id);
+  bool isItemSelected(const QString &id) const;
+  void clearMultiSelection();
+  bool isMultiSelectMode() const { return m_multiSelectMode; }
+  const std::vector<QString> &selectedIds() const { return m_selectedIds; }
+  void refreshSelection() { refreshCurrent(); }
 
 protected:
   std::unique_ptr<ActionPanelState> createActionPanel(const ItemType &item) const override;
   QWidget *generateDetail(const ItemType &item) const override;
+  bool inputFilter(QKeyEvent *event) override;
+  void itemActivated(typename ClipboardHistoryModel::Index idx) override;
 
 private:
   static DefaultAction parseDefaultAction(const QString &str);
@@ -121,10 +133,15 @@ private:
   void handleFilterChange(const SelectorInput::AbstractItem &item);
   std::optional<QString> getSavedDropdownFilter();
   void saveDropdownFilter(const QString &value);
+  void updateMultiSelectStatusText();
 
   ClipboardHistoryModel *m_model;
   ClipboardHistoryController *m_controller;
   ClipboardStatusToolbar *m_statusToolbar;
   PreferenceDropdown *m_filterInput = new PreferenceDropdown(this);
   DefaultAction m_defaultAction = DefaultAction::Copy;
+
+  // Multi-select state
+  bool m_multiSelectMode = false;
+  std::vector<QString> m_selectedIds;
 };

@@ -49,7 +49,7 @@ public:
   WidgetType *createItemWidget(const std::filesystem::path &type) const override {
     return new DefaultListItemWidget;
   }
-  void refreshItemWidget(const std::filesystem::path &path, WidgetType *widget) const override {
+  void refreshItemWidget(const std::filesystem::path &path, WidgetType *widget, int index) const override {
     auto w = static_cast<DefaultListItemWidget *>(widget);
     w->setIconUrl(ImageURL::fileIcon(path));
     w->setName(getLastPathComponent(path).c_str());

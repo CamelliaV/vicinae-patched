@@ -158,7 +158,7 @@ RootSearchModel::WidgetType *RootSearchModel::createItemWidget(const RootItemVar
   return std::visit(visitor, type);
 }
 
-void RootSearchModel::refreshItemWidget(const RootItemVariant &type, WidgetType *widget) const {
+void RootSearchModel::refreshItemWidget(const RootItemVariant &type, WidgetType *widget, int index) const {
   auto refreshRootItem = [&](const RootItem *item, bool showAlias = true) {
     auto w = static_cast<DefaultListItemWidget *>(widget);
     w->setAlias(showAlias ? m_manager->itemMetadata(item->uniqueId()).alias.value_or("").c_str() : "");
