@@ -1,16 +1,3 @@
-diff --git a/vicinae/src/extension/extension-list-model.hpp b/vicinae/src/extension/extension-list-model.hpp
-index c55d0c91..4325aa4f 100644
---- a/vicinae/src/extension/extension-list-model.hpp
-+++ b/vicinae/src/extension/extension-list-model.hpp
-@@ -91,7 +91,7 @@ protected:
-   WidgetType *createItemWidget(const ListItemViewModel *const &type) const override {
-     return new DefaultListItemWidget;
-   }
--  void refreshItemWidget(const ListItemViewModel *const &type, WidgetType *widget) const override {
-+  void refreshItemWidget(const ListItemViewModel *const &type, WidgetType *widget, int index) const override {
-     auto w = static_cast<DefaultListItemWidget *>(widget);
-     w->setName(type->title.c_str());
-     w->setSubtitle(type->subtitle);
 diff --git a/vicinae/src/extensions/clipboard/clipboard-extension.cpp b/vicinae/src/extensions/clipboard/clipboard-extension.cpp
 index 86da0231..01e02352 100644
 --- a/vicinae/src/extensions/clipboard/clipboard-extension.cpp
@@ -44,956 +31,194 @@ index 86da0231..01e02352 100644
 +  return {monitoring, ignorePasswords, eraseOnStartup, encryption, autoPathToUri};
  }
 diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp b/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp
-index c2031477..85fb7c45 100644
+index 85fb7c45..376f596b 100644
 --- a/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp
 +++ b/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp
-@@ -6,25 +6,51 @@
- #include "ui/vlist/common/section-model.hpp"
- #include "ui/vlist/vlist.hpp"
- #include "utils.hpp"
-+#include <algorithm>
-+#include <qevent.h>
+@@ -14,6 +14,7 @@ class ClipboardHistoryItemWidget : public SelectableOmniListWidget {
  
- class ClipboardHistoryItemWidget : public SelectableOmniListWidget {
-+  Q_OBJECT
-+
-+signals:
-+  void shiftClicked(int index);
-+
+ signals:
+   void shiftClicked(int index);
++  void ctrlClicked(int index);
+ 
  public:
--  void setEntry(const ClipboardHistoryEntry &entry) {
-+  void setEntry(const ClipboardHistoryEntry &entry, bool isMultiSelected = false, int index = -1) {
-     auto createdAt = QDateTime::fromSecsSinceEpoch(entry.updatedAt);
-     m_title->setText(entry.textPreview);
-     m_pinIcon->setVisible(entry.pinnedAt);
-     m_description->setText(QString("%1").arg(getRelativeTimeString(createdAt)));
-     m_icon->setFixedSize(25, 25);
-     m_icon->setUrl(iconForMime(entry));
-+    m_checkIcon->setVisible(isMultiSelected);
-+    m_entryId = entry.id;
-+    m_index = index;
-   }
- 
-+  QString entryId() const { return m_entryId; }
-+
-   ClipboardHistoryItemWidget() { setupUI(); }
- 
-+protected:
-+  void mousePressEvent(QMouseEvent *event) override {
-+    if (event->button() == Qt::LeftButton && event->modifiers() & Qt::ShiftModifier) {
-+      qDebug() << "ClipboardHistoryItemWidget: Shift+Click detected, emitting shiftClicked for" << m_entryId << "at index" << m_index;
-+      emit shiftClicked(m_index);
+   void setEntry(const ClipboardHistoryEntry &entry, bool isMultiSelected = false, int index = -1) {
+@@ -35,11 +36,15 @@ public:
+ protected:
+   void mousePressEvent(QMouseEvent *event) override {
+     if (event->button() == Qt::LeftButton && event->modifiers() & Qt::ShiftModifier) {
+-      qDebug() << "ClipboardHistoryItemWidget: Shift+Click detected, emitting shiftClicked for" << m_entryId << "at index" << m_index;
+       emit shiftClicked(m_index);
+       event->accept();
+       return;
+     }
++    if (event->button() == Qt::LeftButton && event->modifiers() & Qt::ControlModifier) {
++      emit ctrlClicked(m_index);
 +      event->accept();
 +      return;
 +    }
-+    SelectableOmniListWidget::mousePressEvent(event);
-+  }
-+
- private:
-   TypographyWidget *m_title = new TypographyWidget;
-   TypographyWidget *m_description = new TypographyWidget;
-   ImageWidget *m_icon = new ImageWidget;
-   ImageWidget *m_pinIcon = new ImageWidget;
-+  ImageWidget *m_checkIcon = new ImageWidget;
-+  QString m_entryId;
-+  int m_index = -1;
+     SelectableOmniListWidget::mousePressEvent(event);
+   }
  
-   ImageURL getLinkIcon(const std::optional<QString> &urlHost) const {
-     auto dflt = ImageURL::builtin("link");
-@@ -53,10 +79,13 @@ private:
-   void setupUI() {
-     m_pinIcon->setUrl(ImageURL::builtin("pin").setFill(SemanticColor::Red));
-     m_pinIcon->setFixedSize(16, 16);
-+    m_checkIcon->setUrl(ImageURL::builtin("checkmark").setFill(SemanticColor::Green));
-+    m_checkIcon->setFixedSize(20, 20);
-+    m_checkIcon->setVisible(false);
-     m_description->setColor(SemanticColor::TextMuted);
-     m_description->setSize(TextSize::TextSmaller);
+@@ -100,6 +105,7 @@ class ClipboardHistoryModel
  
--    auto layout = HStack().margins(5).spacing(10).add(m_icon).add(
-+    auto layout = HStack().margins(5).spacing(10).add(m_checkIcon).add(m_icon).add(
-         VStack().add(m_title).add(HStack().add(m_pinIcon).add(m_description).spacing(5)));
+ signals:
+   void itemShiftClicked(const QString &id, int index) const;
++  void itemCtrlClicked(const QString &id, int index) const;
+   void multiSelectionChanged() const;
  
-     setLayout(layout.buildLayout());
-@@ -69,6 +98,10 @@ class ClipboardHistoryModel
-     : public vicinae::ui::SectionListModel<const ClipboardHistoryEntry *, ClipboardHistorySection> {
-   Q_OBJECT
- 
-+signals:
-+  void itemShiftClicked(const QString &id, int index) const;
-+  void multiSelectionChanged() const;
-+
  public:
-   ClipboardHistoryModel(QObject *parent = nullptr) { setParent(parent); }
- 
-@@ -77,6 +110,17 @@ public:
-     emit dataChanged();
-   }
- 
-+  void setMultiSelectedIds(const std::vector<QString> &ids) {
-+    m_multiSelectedIds = ids;
-+    // Don't emit dataChanged() as it causes the list to recalculate and scroll
-+    // Instead emit a custom signal that the view can handle
-+    emit multiSelectionChanged();
-+  }
-+
-+  bool isMultiSelected(const QString &id) const {
-+    return std::find(m_multiSelectedIds.begin(), m_multiSelectedIds.end(), id) != m_multiSelectedIds.end();
-+  }
-+
- protected:
-   int sectionCount() const override { return 1; }
-   ClipboardHistorySection sectionIdFromIndex(int idx) const override { return ClipboardHistorySection::Main; }
-@@ -94,13 +138,18 @@ protected:
-   WidgetTag widgetTag(const ClipboardHistoryEntry *const &item) const override { return 1; }
- 
-   WidgetType *createItemWidget(const ClipboardHistoryEntry *const &type) const override {
--    return new ClipboardHistoryItemWidget;
-+    auto widget = new ClipboardHistoryItemWidget;
-+    connect(widget, &ClipboardHistoryItemWidget::shiftClicked, this, [this, widget](int index) {
-+      emit itemShiftClicked(widget->entryId(), index);
+@@ -142,6 +148,9 @@ protected:
+     connect(widget, &ClipboardHistoryItemWidget::shiftClicked, this, [this, widget](int index) {
+       emit itemShiftClicked(widget->entryId(), index);
+     });
++    connect(widget, &ClipboardHistoryItemWidget::ctrlClicked, this, [this, widget](int index) {
++      emit itemCtrlClicked(widget->entryId(), index);
 +    });
-+    return widget;
+     return widget;
    }
  
--  void refreshItemWidget(const ClipboardHistoryEntry *const &entry, WidgetType *widget) const override {
--    static_cast<ClipboardHistoryItemWidget *>(widget)->setEntry(*entry);
-+  void refreshItemWidget(const ClipboardHistoryEntry *const &entry, WidgetType *widget, int index) const override {
-+    static_cast<ClipboardHistoryItemWidget *>(widget)->setEntry(*entry, isMultiSelected(entry->id), index);
-   }
- 
- private:
-   PaginatedResponse<ClipboardHistoryEntry> m_res;
-+  std::vector<QString> m_multiSelectedIds;
- };
 diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp b/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
-index 72a89e9e..c199213d 100644
+index 85448506..559acfd7 100644
 --- a/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
 +++ b/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
-@@ -1,9 +1,12 @@
- #include "clipboard-history-view.hpp"
- #include "actions/root-search/root-search-actions.hpp"
-+#include "actions/files/file-actions.hpp"
- #include "builtin_icon.hpp"
- #include "clipboard-actions.hpp"
- #include "common.hpp"
-+#include "environment.hpp"
- #include "extensions/clipboard/history/clipboard-history-model.hpp"
-+#include "lib/keyboard/keyboard.hpp"
- #include "navigation-controller.hpp"
- #include "services/clipboard/clipboard-db.hpp"
- #include "services/clipboard/clipboard-service.hpp"
-@@ -18,10 +21,20 @@
- #include "ui/form/text-area.hpp"
- #include "ui/views/form-view.hpp"
- #include "utils.hpp"
-+#include "services/app-service/app-service.hpp"
-+#include <algorithm>
-+#include <qapplication.h>
-+#include <qevent.h>
-+#include <qguiapplication.h>
-+#include <qlabel.h>
- #include <qmimedata.h>
- #include <qmimedatabase.h>
- #include <qmimetype.h>
- #include <qnamespace.h>
-+#include <qpainter.h>
-+#include <qscreen.h>
-+#include <qscrollarea.h>
-+#include <qscrollbar.h>
- #include <qwidget.h>
- #include <filesystem>
- #include <system_error>
-@@ -53,6 +66,57 @@ public:
-   PasteClipboardSelection(const QString &id) : PasteToFocusedWindowAction(), m_id(id) {}
- };
- 
-+class PasteAsTextAction : public AbstractAction {
-+  QString m_id;
-+
-+  void execute(ApplicationContext *ctx) override {
-+    auto clipman = ctx->services->clipman();
-+    auto wm = ctx->services->windowManager();
-+    auto selection = clipman->retrieveSelectionById(m_id);
-+
-+    if (!selection) {
-+      ctx->services->toastService()->failure("Failed to retrieve selection");
-+      return;
-+    }
-+
-+    // Find the text content (prefer text/plain, then text/uri-list)
-+    QString textContent;
-+    for (const auto &offer : selection->offers) {
-+      if (Utils::isTextMimeType(offer.mimeType) && !offer.data.isEmpty()) {
-+        textContent = QString::fromUtf8(offer.data);
-+        break;
-+      }
-+    }
-+
-+    if (textContent.isEmpty()) {
-+      // Try text/uri-list as fallback
-+      for (const auto &offer : selection->offers) {
-+        if (offer.mimeType == "text/uri-list" && !offer.data.isEmpty()) {
-+          textContent = QString::fromUtf8(offer.data);
-+          break;
-+        }
-+      }
-+    }
-+
-+    if (textContent.isEmpty()) {
-+      ctx->services->toastService()->failure("No text content to paste");
-+      return;
-+    }
-+
-+    // Copy text to clipboard and paste
-+    clipman->copyContent(Clipboard::Text{textContent}, {.concealed = true});
-+    ctx->navigation->closeWindow();
-+
-+    if (wm->canPaste()) {
-+      QTimer::singleShot(Environment::pasteDelay(), [wm]() { wm->provider()->pasteToWindow(nullptr, nullptr); });
-+    }
-+  }
-+
-+public:
-+  PasteAsTextAction(const QString &id)
-+      : AbstractAction("Paste as text", ImageURL::builtin("text")), m_id(id) {}
-+};
-+
- class CopyClipboardSelection : public AbstractAction {
-   QString m_id;
- 
-@@ -73,6 +137,232 @@ public:
-       : AbstractAction("Copy to clipboard", BuiltinIcon::CopyClipboard), m_id(id) {}
- };
- 
-+// Image preview overlay - hovers above launcher, not limited by its size
-+class ImagePreviewWindow : public QWidget {
-+  Q_OBJECT
-+
-+  QLabel *m_imageLabel;
-+  QPixmap m_originalPixmap;
-+  QWidget *m_launcherWindow;
-+  bool m_appEventFilterInstalled = false;
-+
-+  bool isOwnEventTarget(QObject *obj) const {
-+    auto widget = qobject_cast<QWidget *>(obj);
-+    if (!widget) return false;
-+    return widget == this || isAncestorOf(widget);
-+  }
-+
-+protected:
-+  bool eventFilter(QObject *watched, QEvent *event) override {
-+    if (event->type() != QEvent::KeyPress) { return QWidget::eventFilter(watched, event); }
-+
-+    auto *keyEvent = static_cast<QKeyEvent *>(event);
-+    auto key = keyEvent->key();
-+
-+    bool shouldClose = key == Qt::Key_Escape || key == Qt::Key_Up || key == Qt::Key_Down ||
-+                       key == Qt::Key_Left || key == Qt::Key_Right;
-+    if (!shouldClose) { return QWidget::eventFilter(watched, event); }
-+
-+    // Let our own keyPressEvent handle forwarding behavior.
-+    if (isOwnEventTarget(watched)) { return QWidget::eventFilter(watched, event); }
-+
-+    close();
-+    // Don't consume: allow the launcher to handle the same key press (navigation).
-+    return false;
-+  }
-+
-+  void showEvent(QShowEvent *event) override {
-+    QWidget::showEvent(event);
-+    if (!m_appEventFilterInstalled) {
-+      qApp->installEventFilter(this);
-+      m_appEventFilterInstalled = true;
-+    }
-+  }
-+
-+  void closeEvent(QCloseEvent *event) override {
-+    if (m_appEventFilterInstalled) {
-+      qApp->removeEventFilter(this);
-+      m_appEventFilterInstalled = false;
-+    }
-+    QWidget::closeEvent(event);
-+  }
-+
-+  void keyPressEvent(QKeyEvent *event) override {
-+    // Close on Escape
-+    if (event->key() == Qt::Key_Escape) {
-+      close();
-+      return;
-+    }
-+    // Close and forward arrow keys to launcher for navigation
-+    if (event->key() == Qt::Key_Up || event->key() == Qt::Key_Down ||
-+        event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) {
-+      close();
-+      if (m_launcherWindow) {
-+        QApplication::sendEvent(m_launcherWindow, event);
-+      }
-+      return;
-+    }
-+    QWidget::keyPressEvent(event);
-+  }
-+
-+  void mousePressEvent(QMouseEvent *event) override {
-+    // Close on any mouse click (left or right)
-+    if (event->button() == Qt::LeftButton || event->button() == Qt::RightButton) {
-+      close();
-+      return;
-+    }
-+    QWidget::mousePressEvent(event);
-+  }
-+
-+  void paintEvent(QPaintEvent *event) override {
-+    QPainter painter(this);
-+    // Draw dark background only
-+    painter.fillRect(rect(), QColor(30, 30, 30));
-+  }
-+
-+  void resizeEvent(QResizeEvent *event) override {
-+    QWidget::resizeEvent(event);
-+    updateImageDisplay();
-+  }
-+
-+  void updateImageDisplay() {
-+    if (m_originalPixmap.isNull()) return;
-+
-+    // Calculate available space for image (minus margins)
-+    int availableWidth = width() - 30;
-+    int availableHeight = height() - 30;
-+
-+    if (availableWidth <= 0 || availableHeight <= 0) return;
-+
-+    // Scale image to fit while keeping aspect ratio
-+    QPixmap scaled = m_originalPixmap.scaled(
-+        availableWidth, availableHeight,
-+        Qt::KeepAspectRatio, Qt::SmoothTransformation);
-+    m_imageLabel->setPixmap(scaled);
-+  }
-+
-+public:
-+  ImagePreviewWindow(const ImageURL &url, QWidget *launcherWindow = nullptr)
-+      : QWidget(nullptr, Qt::ToolTip | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint | Qt::BypassWindowManagerHint),
-+        m_launcherWindow(launcherWindow) {
-+    setAttribute(Qt::WA_DeleteOnClose);
-+    setAttribute(Qt::WA_ShowWithoutActivating, false);
-+    setFocusPolicy(Qt::StrongFocus);
-+
-+    m_imageLabel = new QLabel;
-+    m_imageLabel->setAlignment(Qt::AlignCenter);
-+
-+    // Load image
-+    if (url.type() == ImageURLType::Local) {
-+      QString path = url.name();
-+      if (!path.isEmpty()) {
-+        m_originalPixmap = QPixmap(path);
-+      }
-+    }
-+
-+    auto layout = new QVBoxLayout;
-+    layout->setContentsMargins(15, 15, 15, 15);
-+    layout->setSpacing(0);
-+    layout->addWidget(m_imageLabel);
-+    setLayout(layout);
-+
-+    // Calculate window size - fit image while respecting screen bounds and aspect ratio
-+    QSize imageSize = m_originalPixmap.size();
-+    QScreen *screen = QGuiApplication::primaryScreen();
-+    QRect screenGeometry = screen->availableGeometry();
-+
-+    int maxWidth = screenGeometry.width() * 0.85;
-+    int maxHeight = screenGeometry.height() * 0.85;
-+
-+    // Start with image size + margins
-+    int windowWidth = imageSize.width() + 30;
-+    int windowHeight = imageSize.height() + 30;
-+
-+    // Scale down if too large for screen, keeping aspect ratio
-+    if (windowWidth > maxWidth || windowHeight > maxHeight) {
-+      double scaleW = (double)maxWidth / windowWidth;
-+      double scaleH = (double)maxHeight / windowHeight;
-+      double scale = qMin(scaleW, scaleH);
-+      windowWidth = windowWidth * scale;
-+      windowHeight = windowHeight * scale;
-+    }
-+
-+    // Minimum size
-+    windowWidth = qMax(windowWidth, 300);
-+    windowHeight = qMax(windowHeight, 200);
-+
-+    resize(windowWidth, windowHeight);
-+
-+    // Position centered on launcher window
-+    if (launcherWindow) {
-+      QRect launcherGeometry = launcherWindow->geometry();
-+      QPoint center = launcherGeometry.center();
-+      int x = center.x() - windowWidth / 2;
-+      int y = center.y() - windowHeight / 2;
-+
-+      // Keep within screen bounds
-+      x = qMax(screenGeometry.left(), qMin(x, screenGeometry.right() - windowWidth));
-+      y = qMax(screenGeometry.top(), qMin(y, screenGeometry.bottom() - windowHeight));
-+
-+      move(x, y);
-+    } else {
-+      move(screenGeometry.center() - rect().center());
-+    }
-+
-+    // Initial display
-+    updateImageDisplay();
-+  }
-+};
-+
-+class ClickableImageWidget : public QWidget {
-+  Q_OBJECT
-+
-+  ImageWidget *m_image;
-+  ImageURL m_url;
-+
-+protected:
-+  void mousePressEvent(QMouseEvent *event) override {
-+    if (event->button() == Qt::LeftButton) {
-+      emit clicked();
-+      return;
-+    }
-+    QWidget::mousePressEvent(event);
-+  }
-+
-+  void enterEvent(QEnterEvent *event) override {
-+    QWidget::enterEvent(event);
-+    setCursor(Qt::PointingHandCursor);
-+  }
-+
-+  void leaveEvent(QEvent *event) override {
-+    QWidget::leaveEvent(event);
-+    setCursor(Qt::ArrowCursor);
-+  }
-+
-+public:
-+  ClickableImageWidget(QWidget *parent = nullptr) : QWidget(parent) {
-+    m_image = new ImageWidget;
-+    auto layout = new QVBoxLayout;
-+    layout->setContentsMargins(0, 0, 0, 0);
-+    layout->addWidget(m_image);
-+    setLayout(layout);
-+  }
-+
-+  void setUrl(const ImageURL &url) {
-+    m_url = url;
-+    m_image->setUrl(url);
-+  }
-+
-+  void setContentsMargins(int left, int top, int right, int bottom) {
-+    m_image->setContentsMargins(left, top, right, bottom);
-+  }
-+
-+  ImageURL url() const { return m_url; }
-+
-+signals:
-+  void clicked();
-+};
-+
- class ClipboardHistoryDetail : public DetailWidget {
-   QTemporaryFile m_tmpFile;
- 
-@@ -106,10 +396,18 @@ class ClipboardHistoryDetail : public DetailWidget {
-     auto mime = QMimeDatabase().mimeTypeForFile(path.c_str());
- 
-     if (mime.name().startsWith("image/")) {
--      auto icon = new ImageWidget;
--      icon->setContentsMargins(10, 10, 10, 10);
--      icon->setUrl(ImageURL::local(path));
--      return icon;
-+      auto imageUrl = ImageURL::local(path);
-+      auto clickable = new ClickableImageWidget;
-+      clickable->setContentsMargins(10, 10, 10, 10);
-+      clickable->setUrl(imageUrl);
-+      connect(clickable, &ClickableImageWidget::clicked, this, [clickable, imageUrl]() {
-+        QWidget *topLevel = clickable->window();
-+        auto *previewWindow = new ImagePreviewWindow(imageUrl, topLevel);
-+        previewWindow->show();
-+        previewWindow->raise();
-+        previewWindow->activateWindow();
-+      });
-+      return clickable;
-     }
- 
-     if (Utils::isTextMimeType(mime)) {
-@@ -153,10 +451,18 @@ class ClipboardHistoryDetail : public DetailWidget {
- 
-       m_tmpFile.write(data);
-       m_tmpFile.close();
--      auto icon = new ImageWidget;
--      icon->setContentsMargins(10, 10, 10, 10);
--      icon->setUrl(ImageURL::local(m_tmpFile.filesystemFileName()));
--      return icon;
-+      auto imageUrl = ImageURL::local(m_tmpFile.filesystemFileName());
-+      auto clickable = new ClickableImageWidget;
-+      clickable->setContentsMargins(10, 10, 10, 10);
-+      clickable->setUrl(imageUrl);
-+      connect(clickable, &ClickableImageWidget::clicked, this, [clickable, imageUrl]() {
-+        QWidget *topLevel = clickable->window();
-+        auto *previewWindow = new ImagePreviewWindow(imageUrl, topLevel);
-+        previewWindow->show();
-+        previewWindow->raise();
-+        previewWindow->activateWindow();
-+      });
-+      return clickable;
-     }
- 
-     if (Utils::isTextMimeType(mimeName) || mimeName == "text/uri-list") {
-@@ -306,6 +612,175 @@ public:
-   EditClipboardKeywordsAction(const QString &id) : PushAction(id) {}
- };
- 
-+class RevealInFileExplorerAction : public AbstractAction {
-+  QString m_id;
-+  std::filesystem::path m_path;
-+
-+  void execute(ApplicationContext *ctx) override {
-+    auto appDb = ctx->services->appDb();
-+    auto fileBrowser = appDb->fileBrowser();
-+
-+    if (!fileBrowser) {
-+      ctx->services->toastService()->failure("No file browser available");
-+      return;
-+    }
-+
-+    QString browserId = fileBrowser->id();
-+    QString pathStr = QString::fromStdString(m_path.string());
-+
-+    std::vector<QString> cmdline;
-+
-+    // Handle different file managers to properly select the file
-+    if (browserId == "org.kde.dolphin.desktop") {
-+      cmdline = {"dolphin", "--select", pathStr};
-+    } else if (browserId == "org.gnome.Nautilus.desktop" || browserId == "nautilus.desktop") {
-+      cmdline = {"nautilus", pathStr};
-+    } else if (browserId == "thunar.desktop" || browserId == "org.xfce.Thunar.desktop") {
-+      cmdline = {"thunar", pathStr};
-+    } else if (browserId == "pcmanfm.desktop") {
-+      cmdline = {"pcmanfm", pathStr};
-+    } else if (browserId == "pcmanfm-qt.desktop") {
-+      cmdline = {"pcmanfm-qt", pathStr};
-+    } else if (browserId == "nemo.desktop" || browserId == "org.cinnamon.Nemo.desktop") {
-+      cmdline = {"nemo", pathStr};
-+    } else {
-+      cmdline = {fileBrowser->program(), pathStr};
-+    }
-+
-+    appDb->launchRaw(cmdline);
-+    ctx->navigation->closeWindow();
-+  }
-+
-+public:
-+  RevealInFileExplorerAction(const QString &id, const std::filesystem::path &path)
-+      : AbstractAction("Reveal in file explorer", ImageURL::builtin("folder")), m_id(id), m_path(path) {}
-+};
-+
-+class ToggleMultiSelectModeAction : public AbstractAction {
-+  ClipboardHistoryView &m_view;
-+
-+  void execute(ApplicationContext *ctx) override { m_view.toggleMultiSelectMode(); }
-+
-+public:
-+  ToggleMultiSelectModeAction(ClipboardHistoryView &view)
-+      : AbstractAction(view.isMultiSelectMode() ? "Exit Multi-Select" : "Toggle Multi-Select",
-+                       ImageURL::builtin("check-list")),
-+        m_view(view) {}
-+};
-+
-+class ToggleItemSelectionAction : public AbstractAction {
-+  ClipboardHistoryView &m_view;
-+  QString m_id;
-+
-+  void execute(ApplicationContext *ctx) override {
-+    m_view.toggleItemSelection(m_id);
-+    m_view.refreshSelection();
-+  }
-+
-+public:
-+  ToggleItemSelectionAction(ClipboardHistoryView &view, const QString &id)
-+      : AbstractAction(view.isItemSelected(id) ? "Deselect Item" : "Select Item",
-+                       ImageURL::builtin(view.isItemSelected(id) ? "xmark" : "checkmark")),
-+        m_view(view), m_id(id) {
-+    setAutoClose(false);
-+  }
-+};
-+
-+class PasteMultipleSelectionsAsTextAction : public AbstractAction {
-+  std::vector<QString> m_ids;
-+  ClipboardHistoryView &m_view;
-+
-+  void execute(ApplicationContext *ctx) override {
-+    auto clipman = ctx->services->clipman();
-+    auto wm = ctx->services->windowManager();
-+
-+    // Collect text content from all selections
-+    QStringList textParts;
-+    for (const auto &id : m_ids) {
-+      auto selection = clipman->retrieveSelectionById(id);
-+      if (!selection) continue;
-+
-+      for (const auto &offer : selection->offers) {
-+        if (Utils::isTextMimeType(offer.mimeType) && !offer.data.isEmpty()) {
-+          textParts.append(QString::fromUtf8(offer.data));
-+          break;
-+        }
-+        // Fallback to text/uri-list
-+        if (offer.mimeType == "text/uri-list" && !offer.data.isEmpty()) {
-+          textParts.append(QString::fromUtf8(offer.data));
-+          break;
-+        }
-+      }
-+    }
-+
-+    if (textParts.isEmpty()) {
-+      ctx->services->toastService()->failure("No text content to paste");
-+      return;
-+    }
-+
-+    QString combinedText = textParts.join("\n");
-+    clipman->copyContent(Clipboard::Text{combinedText}, {.concealed = true});
-+    m_view.clearMultiSelection();
-+    ctx->navigation->closeWindow();
-+
-+    if (wm->canPaste()) {
-+      QTimer::singleShot(Environment::pasteDelay(), [wm]() { wm->provider()->pasteToWindow(nullptr, nullptr); });
-+    }
-+  }
-+
-+public:
-+  PasteMultipleSelectionsAsTextAction(ClipboardHistoryView &view, const std::vector<QString> &ids)
-+      : AbstractAction(QString("Paste %1 items as text").arg(ids.size()), ImageURL::builtin("text")),
-+        m_ids(ids), m_view(view) {}
-+};
-+
-+class PasteMultipleSelectionsAction : public PasteToFocusedWindowAction {
-+  std::vector<QString> m_ids;
-+  ClipboardHistoryView &m_view;
+@@ -737,17 +737,25 @@ public:
+ class PasteMultipleSelectionsAction : public PasteToFocusedWindowAction {
+   std::vector<QString> m_ids;
+   ClipboardHistoryView &m_view;
 +  bool m_reverse;
-+
-+  void execute(ApplicationContext *ctx) override {
+ 
+   void execute(ApplicationContext *ctx) override {
+-    ctx->services->clipman()->copyMultipleSelections(m_ids, {.concealed = true});
 +    auto ids = m_ids;
 +    if (m_reverse) std::reverse(ids.begin(), ids.end());
 +    ctx->services->clipman()->copyMultipleSelections(ids, {.concealed = true});
-+    m_view.clearMultiSelection();
+     m_view.clearMultiSelection();
+-    PasteToFocusedWindowAction::execute(ctx);
 +    ctx->navigation->closeWindow();
 +    auto wm = ctx->services->windowManager();
 +    if (wm->canPaste()) {
 +      QTimer::singleShot(Environment::pasteDelay(), [wm]() { wm->provider()->pasteToWindow(nullptr, nullptr); });
 +    }
-+  }
-+
-+public:
+   }
+ 
+ public:
+-  PasteMultipleSelectionsAction(ClipboardHistoryView &view, const std::vector<QString> &ids)
+-      : PasteToFocusedWindowAction(), m_ids(ids), m_view(view) {
+-    m_title = QString("Paste %1 items").arg(ids.size());
 +  PasteMultipleSelectionsAction(ClipboardHistoryView &view, const std::vector<QString> &ids, bool reverse = false)
 +      : PasteToFocusedWindowAction(), m_ids(ids), m_view(view), m_reverse(reverse) {
 +    m_title = reverse ? QString("Paste %1 items (reverse)").arg(ids.size())
 +                      : QString("Paste %1 items").arg(ids.size());
-+  }
-+};
-+
-+class CopyMultipleSelectionsAction : public AbstractAction {
-+  std::vector<QString> m_ids;
-+  ClipboardHistoryView &m_view;
-+
-+  void execute(ApplicationContext *ctx) override {
-+    auto clipman = ctx->services->clipman();
-+
-+    if (clipman->copyMultipleSelections(m_ids, {.concealed = true})) {
-+      m_view.clearMultiSelection();
-+      ctx->navigation->showHud(QString("%1 items copied to clipboard").arg(m_ids.size()));
-+      return;
-+    }
-+
-+    ctx->services->toastService()->failure("Failed to copy to clipboard");
-+  }
-+
-+public:
-+  CopyMultipleSelectionsAction(ClipboardHistoryView &view, const std::vector<QString> &ids)
-+      : AbstractAction(QString("Copy %1 items").arg(ids.size()), BuiltinIcon::CopyClipboard),
-+        m_ids(ids), m_view(view) {}
-+};
-+
- class RemoveAllSelectionsAction : public AbstractAction {
-   void execute(ApplicationContext *ctx) override {
-     auto alert = new CallbackAlertWidget();
-@@ -389,6 +864,32 @@ void ClipboardHistoryView::initialize() {
-           [this](const PaginatedResponse<ClipboardHistoryEntry> &page) {
+   }
+ };
+ 
+@@ -857,16 +865,35 @@ void ClipboardHistoryView::initialize() {
              m_statusToolbar->setLeftText(QString("%1 Items").arg(page.totalCount));
            });
-+
-+  // Handle Shift+Click for multi-select
-+  connect(m_model, &ClipboardHistoryModel::itemShiftClicked, this, [this](const QString &id, int index) {
-+    qDebug() << "ClipboardHistoryView: Received itemShiftClicked for" << id << "at index" << index;
+ 
+-  // Handle Shift+Click for multi-select
++  // Handle Shift+Click for range selection
+   connect(m_model, &ClipboardHistoryModel::itemShiftClicked, this, [this](const QString &id, int index) {
+-    qDebug() << "ClipboardHistoryView: Received itemShiftClicked for" << id << "at index" << index;
 +    if (!m_multiSelectMode) { m_multiSelectMode = true; }
-+    toggleItemSelection(id);
++    if (m_rangeAnchorIndex < 0) {
++      // First shift+click sets anchor
++      m_rangeAnchorIndex = index;
++      if (!isItemSelected(id)) toggleItemSelection(id);
++    } else {
++      // Second shift+click selects range
++      int start = std::min(m_rangeAnchorIndex, index);
++      int end = std::max(m_rangeAnchorIndex, index);
++      for (int i = start; i <= end; ++i) {
++        if (auto item = m_model->fromIndex(i)) {
++          if (!isItemSelected((*item)->id)) toggleItemSelection((*item)->id);
++        }
++      }
++      m_rangeAnchorIndex = -1;
++    }
 +    updateMultiSelectStatusText();
-+    // Also select the item in the list so the action panel updates
-+    if (index >= 0) {
-+      m_list->setSelected(index);
-+    }
++    if (index >= 0) m_list->setSelected(index);
 +  });
 +
-+  // Handle multi-selection changes - refresh widgets without scrolling
-+  connect(m_model, &ClipboardHistoryModel::multiSelectionChanged, this, [this]() { m_list->refreshAll(); });
-+
-+  // Reset multi-select state when window closes/hides
-+  connect(context()->navigation.get(), &NavigationController::windowVisiblityChanged, this, [this](bool visible) {
-+    if (!visible && m_multiSelectMode) {
-+      m_multiSelectMode = false;
-+      m_selectedIds.clear();
-+      m_model->setMultiSelectedIds(m_selectedIds);
-+      // Reload to refresh the status text with item count
-+      m_controller->reloadSearch();
-+    }
-+  });
- }
++  // Handle Ctrl+Click for single item toggle
++  connect(m_model, &ClipboardHistoryModel::itemCtrlClicked, this, [this](const QString &id, int index) {
+     if (!m_multiSelectMode) { m_multiSelectMode = true; }
+     toggleItemSelection(id);
++    m_rangeAnchorIndex = -1;  // Reset range anchor on ctrl+click
+     updateMultiSelectStatusText();
+-    // Also select the item in the list so the action panel updates
+-    if (index >= 0) {
+-      m_list->setSelected(index);
+-    }
++    if (index >= 0) m_list->setSelected(index);
+   });
  
- std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const ItemType &info) const {
-@@ -411,28 +912,143 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const
-   removeAll->setShortcut(Keybind::DangerousRemoveAction);
-   pin->setShortcut(Keybind::PinAction);
+   // Handle multi-selection changes - refresh widgets without scrolling
+@@ -877,6 +904,7 @@ void ClipboardHistoryView::initialize() {
+     if (!visible && m_multiSelectMode) {
+       m_multiSelectMode = false;
+       m_selectedIds.clear();
++      m_rangeAnchorIndex = -1;
+       m_model->setMultiSelectedIds(m_selectedIds);
+       // Reload to refresh the status text with item count
+       m_controller->reloadSearch();
+@@ -927,11 +955,16 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const
+             new PasteMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
+         pasteMultiple->addShortcut(Keybind::PasteAction);
  
--  if (isCopyable) {
-+  // Multi-select actions
-+  auto multiSelectSection = panel->createSection();
-+  auto toggleMultiSelect =
-+      new ToggleMultiSelectModeAction(*const_cast<ClipboardHistoryView *>(this));
-+  toggleMultiSelect->setShortcut(Keyboard::Shortcut(Qt::Key_M, Qt::ControlModifier));
-+  multiSelectSection->addAction(toggleMultiSelect);
-+
-+  if (m_multiSelectMode) {
-+    auto toggleSelection =
-+        new ToggleItemSelectionAction(*const_cast<ClipboardHistoryView *>(this), info->id);
-+    toggleSelection->setShortcut(Keyboard::Shortcut(Qt::Key_Space));
-+    multiSelectSection->addAction(toggleSelection);
-+
-+    if (!m_selectedIds.empty()) {
-+      auto copyMultiple =
-+          new CopyMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
-+      copyMultiple->addShortcut(Keybind::CopyAction);
-+
-+      if (wm->canPaste()) {
-+        auto pasteMultiple =
-+            new PasteMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
-+        pasteMultiple->addShortcut(Keybind::PasteAction);
-+
 +        auto pasteMultipleReverse =
 +            new PasteMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds, true);
 +        pasteMultipleReverse->setShortcut(Keyboard::Shortcut(Qt::Key_Return, Qt::ControlModifier));
 +
-+        auto pasteMultipleAsText =
-+            new PasteMultipleSelectionsAsTextAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
-+        pasteMultipleAsText->setShortcut(Keyboard::Shortcut(Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier));
-+
-+        mainSection->addAction(pasteMultiple);
-+        mainSection->addAction(pasteMultipleReverse);
-+        mainSection->addAction(copyMultiple);
-+        mainSection->addAction(pasteMultipleAsText);
-+      } else {
-+        mainSection->addAction(copyMultiple);
-+      }
-+    }
-+  }
-+
-+  if (isCopyable && !m_multiSelectMode) {
-     auto copy = new CopyClipboardSelection(info->id);
-     copy->addShortcut(Keybind::CopyAction);
+         auto pasteMultipleAsText =
+             new PasteMultipleSelectionsAsTextAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
+         pasteMultipleAsText->setShortcut(Keyboard::Shortcut(Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier));
  
-     if (wm->canPaste()) {
-       auto paste = new PasteClipboardSelection(info->id);
-       paste->addShortcut(Keybind::PasteAction);
-+
-+      auto pasteAsText = new PasteAsTextAction(info->id);
-+      pasteAsText->setShortcut(Keyboard::Shortcut(Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier));
-+
-       if (m_defaultAction == ClipboardHistoryView::DefaultAction::Copy) {
-         mainSection->addAction(copy);
-         mainSection->addAction(paste);
-+        mainSection->addAction(pasteAsText);
+         mainSection->addAction(pasteMultiple);
++        mainSection->addAction(pasteMultipleReverse);
+         mainSection->addAction(copyMultiple);
+         mainSection->addAction(pasteMultipleAsText);
        } else {
-         mainSection->addAction(paste);
-         mainSection->addAction(copy);
-+        mainSection->addAction(pasteAsText);
-       }
+@@ -1060,6 +1093,7 @@ void ClipboardHistoryView::onDeactivate() {
+   if (m_multiSelectMode) {
+     m_multiSelectMode = false;
+     m_selectedIds.clear();
++    m_rangeAnchorIndex = -1;
+     m_model->setMultiSelectedIds(m_selectedIds);
+     // Reload to refresh the status text with item count
+     m_controller->reloadSearch();
+@@ -1123,6 +1157,7 @@ void ClipboardHistoryView::toggleMultiSelectMode() {
+   if (!m_multiSelectMode) {
+     // Exiting multi-select mode - clear all selections
+     m_selectedIds.clear();
++    m_rangeAnchorIndex = -1;
+     m_model->setMultiSelectedIds(m_selectedIds);
+     // Refresh the list to remove checkmarks and restore normal item count display
+     m_list->refreshAll();
+@@ -1152,14 +1187,17 @@ bool ClipboardHistoryView::isItemSelected(const QString &id) const {
+ 
+ void ClipboardHistoryView::clearMultiSelection() {
+   m_selectedIds.clear();
++  m_rangeAnchorIndex = -1;
+   updateMultiSelectStatusText();
+   m_model->setMultiSelectedIds(m_selectedIds);
+ }
+ 
+ void ClipboardHistoryView::updateMultiSelectStatusText() {
+   if (m_multiSelectMode) {
+-    if (m_selectedIds.empty()) {
+-      m_statusToolbar->setLeftText("Multi-select: Press Space to select items");
++    if (m_rangeAnchorIndex >= 0) {
++      m_statusToolbar->setLeftText(QString("Range select: Shift+Click end item (%1 selected)").arg(m_selectedIds.size()));
++    } else if (m_selectedIds.empty()) {
++      m_statusToolbar->setLeftText("Multi-select: Shift+Click for range, Ctrl+Click for single");
      } else {
-       mainSection->addAction(copy);
+       m_statusToolbar->setLeftText(QString("Multi-select: %1 item(s) selected").arg(m_selectedIds.size()));
      }
-+  } else if (isCopyable && m_multiSelectMode && m_selectedIds.empty()) {
-+    // In multi-select mode but no items selected yet - show single item actions
-+    auto copy = new CopyClipboardSelection(info->id);
-+    copy->addShortcut(Keybind::CopyAction);
-+
-+    if (wm->canPaste()) {
-+      auto paste = new PasteClipboardSelection(info->id);
-+      paste->addShortcut(Keybind::PasteAction);
-+
-+      auto pasteAsText = new PasteAsTextAction(info->id);
-+      pasteAsText->setShortcut(Keyboard::Shortcut(Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier));
-+
-+      mainSection->addAction(paste);
-+      mainSection->addAction(copy);
-+      mainSection->addAction(pasteAsText);
-+    } else {
-+      mainSection->addAction(copy);
-+    }
+@@ -1192,6 +1230,28 @@ bool ClipboardHistoryView::inputFilter(QKeyEvent *event) {
+     }
    }
  
-   auto toolsSection = panel->createSection();
-   auto dangerSection = panel->createSection();
- 
-+  // Add reveal in file explorer action for File and Image items
-+  if (info->kind == ClipboardOfferKind::File || info->kind == ClipboardOfferKind::Image) {
-+    std::optional<fs::path> filePath;
-+
-+    if (info->mimeType == "text/uri-list") {
-+      auto data = clipman->getMainOfferData(info->id);
-+      if (data) {
-+        QString text = QString::fromUtf8(data.value());
-+        auto uris = text.split("\r\n", Qt::SkipEmptyParts);
-+        if (!uris.isEmpty()) {
-+          QUrl url(uris.first().trimmed());
-+          if (url.isLocalFile()) {
-+            std::error_code ec;
-+            fs::path path = url.toLocalFile().toStdString();
-+            if (fs::exists(path, ec)) {
-+              filePath = path;
-+            }
-+          }
-+        }
-+      }
-+    } else if (info->mimeType.startsWith("image/")) {
-+      auto selection = clipman->retrieveSelectionById(info->id);
-+      if (selection) {
-+        for (const auto &offer : selection->offers) {
-+          if (offer.mimeType == "text/uri-list" && !offer.data.isEmpty()) {
-+            QString text = QString::fromUtf8(offer.data);
-+            auto uris = text.split("\r\n", Qt::SkipEmptyParts);
-+            if (!uris.isEmpty()) {
-+              QUrl url(uris.first().trimmed());
-+              if (url.isLocalFile()) {
-+                std::error_code ec;
-+                fs::path path = url.toLocalFile().toStdString();
-+                if (fs::exists(path, ec)) {
-+                  filePath = path;
-+                  break;
-+                }
-+              }
-+            }
-+          }
-+        }
-+      }
-+    }
-+
-+    if (filePath) {
-+      auto reveal = new RevealInFileExplorerAction(info->id, *filePath);
-+      reveal->setShortcut(Keyboard::Shortcut(Qt::Key_R, Qt::ControlModifier | Qt::AltModifier));
-+      toolsSection->addAction(reveal);
-+    }
-+  }
-+
-   toolsSection->addAction(pin);
-   toolsSection->addAction(editKeywords);
-   dangerSection->addAction(remove);
-@@ -452,6 +1068,18 @@ void ClipboardHistoryView::textChanged(const QString &value) {
-   m_list->selectFirst();
- }
- 
-+void ClipboardHistoryView::onDeactivate() {
-+  // Reset multi-select state when the view is deactivated (e.g., another view pushed)
-+  if (m_multiSelectMode) {
-+    m_multiSelectMode = false;
-+    m_selectedIds.clear();
-+    m_model->setMultiSelectedIds(m_selectedIds);
-+    // Reload to refresh the status text with item count
-+    m_controller->reloadSearch();
-+  }
-+  TypedListView::onDeactivate();
-+}
-+
- void ClipboardHistoryView::handleMonitoringChanged(bool monitor) {
-   if (monitor) {
-     m_statusToolbar->setClipboardStatus(ClipboardStatusToolbar::ClipboardStatus::Monitoring);
-@@ -501,3 +1129,132 @@ std::optional<QString> ClipboardHistoryView::getSavedDropdownFilter() {
- 
-   return value.toString();
- }
-+
-+void ClipboardHistoryView::toggleMultiSelectMode() {
-+  m_multiSelectMode = !m_multiSelectMode;
-+
-+  if (!m_multiSelectMode) {
-+    // Exiting multi-select mode - clear all selections
-+    m_selectedIds.clear();
-+    m_model->setMultiSelectedIds(m_selectedIds);
-+    // Refresh the list to remove checkmarks and restore normal item count display
-+    m_list->refreshAll();
-+    // Reload to refresh the status text with item count
-+    m_controller->reloadSearch();
-+  } else {
-+    updateMultiSelectStatusText();
-+    m_model->setMultiSelectedIds(m_selectedIds);
-+  }
-+}
-+
-+void ClipboardHistoryView::toggleItemSelection(const QString &id) {
-+  auto it = std::find(m_selectedIds.begin(), m_selectedIds.end(), id);
-+
-+  if (it != m_selectedIds.end()) {
-+    m_selectedIds.erase(it);
-+  } else {
-+    m_selectedIds.push_back(id);
-+  }
-+
-+  m_model->setMultiSelectedIds(m_selectedIds);
-+}
-+
-+bool ClipboardHistoryView::isItemSelected(const QString &id) const {
-+  return std::find(m_selectedIds.begin(), m_selectedIds.end(), id) != m_selectedIds.end();
-+}
-+
-+void ClipboardHistoryView::clearMultiSelection() {
-+  m_selectedIds.clear();
-+  updateMultiSelectStatusText();
-+  m_model->setMultiSelectedIds(m_selectedIds);
-+}
-+
-+void ClipboardHistoryView::updateMultiSelectStatusText() {
-+  if (m_multiSelectMode) {
-+    if (m_selectedIds.empty()) {
-+      m_statusToolbar->setLeftText("Multi-select: Press Space to select items");
-+    } else {
-+      m_statusToolbar->setLeftText(QString("Multi-select: %1 item(s) selected").arg(m_selectedIds.size()));
-+    }
-+  }
-+}
-+
-+bool ClipboardHistoryView::inputFilter(QKeyEvent *event) {
-+  // Handle Space for toggling selection in multi-select mode
-+  if (m_multiSelectMode && event->key() == Qt::Key_Space && event->modifiers() == Qt::NoModifier) {
-+    if (auto idx = m_list->currentSelection()) {
-+      if (auto item = m_model->fromIndex(*idx)) {
-+        toggleItemSelection((*item)->id);
-+        updateMultiSelectStatusText();
-+        return true;
-+      }
-+    }
-+  }
-+
-+  // Handle Shift+Enter to select current item and enter multi-select mode
-+  if (event->key() == Qt::Key_Return && event->modifiers() == Qt::ShiftModifier) {
-+    if (auto idx = m_list->currentSelection()) {
-+      if (auto item = m_model->fromIndex(*idx)) {
-+        if (!m_multiSelectMode) {
-+          m_multiSelectMode = true;
-+        }
-+        toggleItemSelection((*item)->id);
-+        updateMultiSelectStatusText();
-+        return true;
-+      }
-+    }
-+  }
-+
 +  // Handle Ctrl+Enter for reverse paste in multi-select mode
 +  if (m_multiSelectMode && !m_selectedIds.empty() &&
 +      event->key() == Qt::Key_Return && event->modifiers() == Qt::ControlModifier) {
@@ -1016,134 +241,21 @@ index 72a89e9e..c199213d 100644
 +    }
 +  }
 +
-+  return TypedListView::inputFilter(event);
-+}
-+
-+void ClipboardHistoryView::itemActivated(typename ClipboardHistoryModel::Index idx) {
-+  // In multi-select mode with items selected, paste all selected items
-+  if (m_multiSelectMode && !m_selectedIds.empty()) {
-+    auto clipman = context()->services->clipman();
-+    auto wm = context()->services->windowManager();
-+    auto selectedCount = m_selectedIds.size();
-+
-+    if (clipman->copyMultipleSelections(m_selectedIds, {.concealed = true})) {
-+      clearMultiSelection();
-+      m_multiSelectMode = false;
-+      m_controller->reloadSearch();
-+
-+      // Paste if window manager supports it
-+      if (wm->canPaste()) {
-+        context()->navigation->closeWindow();
-+        QTimer::singleShot(Environment::pasteDelay(), [wm]() { wm->provider()->pasteToWindow(nullptr, nullptr); });
-+      } else {
-+        context()->navigation->showHud(QString("%1 items copied to clipboard").arg(selectedCount));
-+      }
-+      return;
-+    }
-+  }
-+
-+  // Default behavior - execute primary action
-+  TypedListView::itemActivated(idx);
-+}
-+
-+#include "clipboard-history-view.moc"
-diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp b/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp
-index f472c0cc..843431b6 100644
---- a/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp
-+++ b/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp
-@@ -104,10 +104,22 @@ public:
- 
-   void initialize() override;
-   void textChanged(const QString &value) override;
-+  void onDeactivate() override;
-+
-+  // Multi-select methods
-+  void toggleMultiSelectMode();
-+  void toggleItemSelection(const QString &id);
-+  bool isItemSelected(const QString &id) const;
-+  void clearMultiSelection();
-+  bool isMultiSelectMode() const { return m_multiSelectMode; }
-+  const std::vector<QString> &selectedIds() const { return m_selectedIds; }
-+  void refreshSelection() { refreshCurrent(); }
- 
- protected:
-   std::unique_ptr<ActionPanelState> createActionPanel(const ItemType &item) const override;
-   QWidget *generateDetail(const ItemType &item) const override;
-+  bool inputFilter(QKeyEvent *event) override;
-+  void itemActivated(typename ClipboardHistoryModel::Index idx) override;
- 
- private:
-   static DefaultAction parseDefaultAction(const QString &str);
-@@ -121,10 +133,15 @@ private:
-   void handleFilterChange(const SelectorInput::AbstractItem &item);
-   std::optional<QString> getSavedDropdownFilter();
-   void saveDropdownFilter(const QString &value);
-+  void updateMultiSelectStatusText();
- 
-   ClipboardHistoryModel *m_model;
-   ClipboardHistoryController *m_controller;
-   ClipboardStatusToolbar *m_statusToolbar;
-   PreferenceDropdown *m_filterInput = new PreferenceDropdown(this);
-   DefaultAction m_defaultAction = DefaultAction::Copy;
-+
-+  // Multi-select state
-+  bool m_multiSelectMode = false;
-+  std::vector<QString> m_selectedIds;
- };
-diff --git a/vicinae/src/extensions/file/search/file-search-model.hpp b/vicinae/src/extensions/file/search/file-search-model.hpp
-index d3e610f9..9fb80fd0 100644
---- a/vicinae/src/extensions/file/search/file-search-model.hpp
-+++ b/vicinae/src/extensions/file/search/file-search-model.hpp
-@@ -49,7 +49,7 @@ public:
-   WidgetType *createItemWidget(const std::filesystem::path &type) const override {
-     return new DefaultListItemWidget;
-   }
--  void refreshItemWidget(const std::filesystem::path &path, WidgetType *widget) const override {
-+  void refreshItemWidget(const std::filesystem::path &path, WidgetType *widget, int index) const override {
-     auto w = static_cast<DefaultListItemWidget *>(widget);
-     w->setIconUrl(ImageURL::fileIcon(path));
-     w->setName(getLastPathComponent(path).c_str());
-diff --git a/vicinae/src/extensions/root/root-search-model.cpp b/vicinae/src/extensions/root/root-search-model.cpp
-index 4e339937..547e0e0e 100644
---- a/vicinae/src/extensions/root/root-search-model.cpp
-+++ b/vicinae/src/extensions/root/root-search-model.cpp
-@@ -158,7 +158,7 @@ RootSearchModel::WidgetType *RootSearchModel::createItemWidget(const RootItemVar
-   return std::visit(visitor, type);
+   return TypedListView::inputFilter(event);
  }
  
--void RootSearchModel::refreshItemWidget(const RootItemVariant &type, WidgetType *widget) const {
-+void RootSearchModel::refreshItemWidget(const RootItemVariant &type, WidgetType *widget, int index) const {
-   auto refreshRootItem = [&](const RootItem *item, bool showAlias = true) {
-     auto w = static_cast<DefaultListItemWidget *>(widget);
-     w->setAlias(showAlias ? m_manager->itemMetadata(item->uniqueId()).alias.value_or("").c_str() : "");
-diff --git a/vicinae/src/extensions/root/root-search-model.hpp b/vicinae/src/extensions/root/root-search-model.hpp
-index 068aa713..1d229dbe 100644
---- a/vicinae/src/extensions/root/root-search-model.hpp
-+++ b/vicinae/src/extensions/root/root-search-model.hpp
-@@ -86,7 +86,7 @@ protected:
- 
-   WidgetType *createItemWidget(const RootItemVariant &type) const override;
- 
--  void refreshItemWidget(const RootItemVariant &type, WidgetType *widget) const override;
-+  void refreshItemWidget(const RootItemVariant &type, WidgetType *widget, int index) const override;
- 
- private:
-   static constexpr const size_t ITEM_HEIGHT = 41;
-diff --git a/vicinae/src/extensions/theme/manage/theme-list-model.hpp b/vicinae/src/extensions/theme/manage/theme-list-model.hpp
-index 843d0c0b..5299a801 100644
---- a/vicinae/src/extensions/theme/manage/theme-list-model.hpp
-+++ b/vicinae/src/extensions/theme/manage/theme-list-model.hpp
-@@ -110,7 +110,7 @@ public:
- 
-   WidgetType *createItemWidget(const Item &type) const override { return new ThemeItemWidget; }
- 
--  void refreshItemWidget(const Item &theme, WidgetType *widget) const override {
-+  void refreshItemWidget(const Item &theme, WidgetType *widget, int index) const override {
-     auto item = static_cast<ThemeItemWidget *>(widget);
- 
-     item->setTitle(theme->name());
+diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp b/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp
+index 843431b6..a4e73efb 100644
+--- a/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp
++++ b/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp
+@@ -144,4 +144,5 @@ private:
+   // Multi-select state
+   bool m_multiSelectMode = false;
+   std::vector<QString> m_selectedIds;
++  int m_rangeAnchorIndex = -1;  // For Shift+Click range selection
+ };
 diff --git a/vicinae/src/services/clipboard/clipboard-service.cpp b/vicinae/src/services/clipboard/clipboard-service.cpp
-index 44401239..3acf070e 100644
+index adbe0410..3acf070e 100644
 --- a/vicinae/src/services/clipboard/clipboard-service.cpp
 +++ b/vicinae/src/services/clipboard/clipboard-service.cpp
 @@ -3,6 +3,7 @@
@@ -1154,15 +266,7 @@ index 44401239..3acf070e 100644
  #include "environment.hpp"
  #include "services/app-service/abstract-app-db.hpp"
  #include "x11/x11-clipboard-server.hpp"
-@@ -11,6 +12,7 @@
- #include <qlogging.h>
- #include <qmimedata.h>
- #include <qnamespace.h>
-+#include <qregularexpression.h>
- #include <qsqlquery.h>
- #include <qstringview.h>
- #include <qt6keychain/keychain.h>
-@@ -131,6 +133,8 @@ bool ClipboardService::isEncryptionReady() const { return m_encrypter.get(); }
+@@ -132,6 +133,8 @@ bool ClipboardService::isEncryptionReady() const { return m_encrypter.get(); }
  
  void ClipboardService::setIgnorePasswords(bool value) { m_ignorePasswords = value; }
  
@@ -1171,242 +275,26 @@ index 44401239..3acf070e 100644
  void ClipboardService::setMonitoring(bool value) {
    if (m_monitoring == value) return;
  
-@@ -345,6 +349,82 @@ ClipboardSelection &ClipboardService::sanitizeSelection(ClipboardSelection &sele
+@@ -346,6 +349,9 @@ ClipboardSelection &ClipboardService::sanitizeSelection(ClipboardSelection &sele
    });
    std::ranges::unique(selection.offers, [](auto &&a, auto &&b) { return a.mimeType == b.mimeType; });
  
 +  // Skip path-to-URI conversion if disabled
 +  if (!m_autoPathToUri) return selection;
 +
-+  // Check if there's already a text/uri-list with file:// URIs - if so, skip conversion
-+  bool alreadyHasFileUri = std::ranges::any_of(selection.offers, [](const auto &offer) {
-+    return offer.mimeType == "text/uri-list" &&
-+           QString::fromUtf8(offer.data).trimmed().startsWith("file://");
-+  });
-+
-+  if (alreadyHasFileUri) {
-+    // Already has proper file:// URI, no conversion needed
-+    return selection;
-+  }
-+
-+  // Check if we have a plain text offer that looks like an absolute file path
-+  // Some screenshot tools copy the file path as plain text instead of as a URI
-+  // First, find any text offer to check if it's a file path
-+  QString detectedFilePath;
-+  for (const auto &offer : selection.offers) {
-+    if (Utils::isTextMimeType(offer.mimeType) && !offer.data.isEmpty()) {
-+      QString text = QString::fromUtf8(offer.data).trimmed();
-+      // Check if it looks like an absolute file path (starts with /)
-+      // and doesn't already have a scheme (like file:// or http://)
-+      // This makes the conversion idempotent
-+      if (text.startsWith('/') && !text.contains("://")) {
-+        fs::path filePath = text.toStdString();
-+        std::error_code ec;
-+        if (fs::exists(filePath, ec) && fs::is_regular_file(filePath, ec)) {
-+          detectedFilePath = text;
-+          break;
-+        }
-+      }
-+    }
-+  }
-+
-+  if (!detectedFilePath.isEmpty()) {
-+    QString fileUri = QString("file://%1").arg(detectedFilePath);
-+
-+    // Update ALL text offers to contain the URI
-+    for (auto &offer : selection.offers) {
-+      if (Utils::isTextMimeType(offer.mimeType)) {
-+        offer.data = fileUri.toUtf8();
-+      }
-+    }
-+
-+    // Add text/uri-list offer
-+    ClipboardDataOffer uriOffer;
-+    uriOffer.mimeType = "text/uri-list";
-+    uriOffer.data = fileUri.toUtf8();
-+    selection.offers.push_back(uriOffer);
-+
-+    // Check if this is an image file and add actual image data
-+    // This allows apps like Notion to receive the image directly
-+    QMimeDatabase mimeDb;
-+    QMimeType mimeType = mimeDb.mimeTypeForFile(detectedFilePath);
-+    if (mimeType.name().startsWith("image/")) {
-+      // Check if we already have image data
-+      bool hasImageData = std::ranges::any_of(
-+          selection.offers, [](const auto &offer) { return offer.mimeType.startsWith("image/"); });
-+
-+      if (!hasImageData) {
-+        QFile imageFile(detectedFilePath);
-+        if (imageFile.open(QIODevice::ReadOnly)) {
-+          ClipboardDataOffer imageOffer;
-+          imageOffer.mimeType = mimeType.name();
-+          imageOffer.data = imageFile.readAll();
-+          selection.offers.push_back(imageOffer);
-+          qInfo() << "Added image data from file:" << detectedFilePath << "mime:" << mimeType.name()
-+                  << "size:" << imageOffer.data.size();
-+        }
-+      }
-+    }
-+
-+    qInfo() << "Converted plain file path to URI:" << fileUri;
-+  }
-+
-   return selection;
- }
- 
-@@ -545,6 +625,17 @@ bool ClipboardService::copySelection(const ClipboardSelection &selection,
-         qDebug() << "ClipboardService: Set image data with mime type" << offer.mimeType
-                  << "size:" << offer.data.size();
-       }
-+    } else if (offer.mimeType == "text/uri-list") {
-+      // Handle text/uri-list specially - set both raw data and URLs for Qt compatibility
-+      mimeData->setData(offer.mimeType, offer.data);
-+      QString uriData = QString::fromUtf8(offer.data).trimmed();
-+      QList<QUrl> urls;
-+      for (const auto &uri : uriData.split(QRegularExpression("[\r\n]+"), Qt::SkipEmptyParts)) {
-+        urls.append(QUrl(uri));
-+      }
-+      if (!urls.isEmpty()) {
-+        mimeData->setUrls(urls);
-+      }
-     } else {
-       if (Utils::isTextMimeType(offer.mimeType)) {
-         mimeData->setText(QString::fromUtf8(offer.data));
-@@ -617,6 +708,133 @@ bool ClipboardService::removeAllSelections() {
-   return true;
- }
- 
-+QMimeData *ClipboardService::buildCompositeSelection(const std::vector<ClipboardSelection> &selections) {
-+  QMimeData *composite = new QMimeData;
-+  QString combinedText;
-+  QString combinedHtml = "<div style=\"font-family: sans-serif;\">";
+   // Check if there's already a text/uri-list with file:// URIs - if so, skip conversion
+   bool alreadyHasFileUri = std::ranges::any_of(selection.offers, [](const auto &offer) {
+     return offer.mimeType == "text/uri-list" &&
+@@ -706,7 +712,7 @@ QMimeData *ClipboardService::buildCompositeSelection(const std::vector<Clipboard
+   QMimeData *composite = new QMimeData;
+   QString combinedText;
+   QString combinedHtml = "<div style=\"font-family: sans-serif;\">";
+-  QStringList fileUris;  // Collect file:// URIs for text/uri-list
 +  QStringList fileUris;
-+  int imageCount = 0;
-+  QByteArray singleImageData;
-+  QString singleImageMime;
-+
-+  for (const auto &sel : selections) {
-+    QString selectionText;
-+    QString selectionHtml;
-+    QByteArray selectionImageData;
-+    QString selectionImageMime;
-+    QString selectionFileUri;
-+
-+    // First pass: collect text, HTML, image content, and file URIs
-+    for (const auto &offer : sel.offers) {
-+      if (offer.mimeType == "text/uri-list" && !offer.data.isEmpty()) {
-+        // Collect file URIs from text/uri-list
-+        QString uriData = QString::fromUtf8(offer.data).trimmed();
-+        for (const auto &uri : uriData.split(QRegularExpression("[\r\n]+"), Qt::SkipEmptyParts)) {
-+          if (uri.startsWith("file://")) {
-+            selectionFileUri = uri;
-+            fileUris.append(uri);
-+          }
-+        }
-+      } else if (Utils::isTextMimeType(offer.mimeType) && !offer.data.isEmpty()) {
-+        selectionText = QString::fromUtf8(offer.data);
-+      } else if (offer.mimeType == "text/html" && !offer.data.isEmpty()) {
-+        selectionHtml = QString::fromUtf8(offer.data);
-+      } else if (offer.mimeType.startsWith("image/") && !offer.data.isEmpty()) {
-+        selectionImageData = offer.data;
-+        selectionImageMime = offer.mimeType;
-+      }
-+    }
-+
-+    // Add image content to HTML
-+    if (!selectionImageData.isEmpty()) {
-+      QString base64 = selectionImageData.toBase64();
-+      combinedHtml +=
-+          QString("<img src=\"data:%1;base64,%2\" style=\"max-width:100%;\"/>").arg(selectionImageMime, base64);
-+
-+      // Track image count and store first image
-+      imageCount++;
-+      if (imageCount == 1) {
-+        singleImageData = selectionImageData;
-+        singleImageMime = selectionImageMime;
-+      }
-+    }
-+
-+    // Add text content (skip file:// URIs if we have a proper file URI in uri-list)
-+    if (!selectionText.isEmpty() && !selectionText.startsWith("file://")) {
-+      if (!combinedText.isEmpty()) { combinedText += "\n"; }
-+      combinedText += selectionText;
-+      combinedHtml += QString("<p>%1</p>").arg(selectionText.toHtmlEscaped());
-+    } else if (!selectionHtml.isEmpty()) {
-+      // If no plain text but has HTML, use HTML and try to extract text
-+      combinedHtml += selectionHtml;
-+      // Strip HTML tags for plain text fallback
-+      QString strippedText = selectionHtml;
-+      strippedText.remove(QRegularExpression("<[^>]*>"));
-+      strippedText = strippedText.simplified();
-+      if (!strippedText.isEmpty()) {
-+        if (!combinedText.isEmpty()) { combinedText += "\n"; }
-+        combinedText += strippedText;
-+      }
-+    }
-+  }
-+
-+  combinedHtml += "</div>";
-+
-+  // Set text/uri-list with all file URIs (separated by \r\n as per RFC 2483)
-+  if (!fileUris.isEmpty()) {
-+    QString uriList = fileUris.join("\r\n");
-+    composite->setData("text/uri-list", uriList.toUtf8());
-+    // Also set URLs for Qt compatibility
-+    QList<QUrl> urls;
-+    for (const auto &uri : fileUris) {
-+      urls.append(QUrl(uri));
-+    }
-+    composite->setUrls(urls);
-+  }
-+
-+  // Set text and HTML
-+  if (!combinedText.isEmpty()) {
-+    composite->setText(combinedText.trimmed());
-+  } else if (!fileUris.isEmpty()) {
-+    // If no other text, use the file URIs as text fallback
-+    composite->setText(fileUris.join("\n"));
-+  }
-+  composite->setHtml(combinedHtml);
-+
-+  // Only set raw image data if there's exactly one image and no text and one selection
-+  // This forces apps like Notion to use HTML when there are multiple items
-+  if (imageCount == 1 && combinedText.isEmpty() && selections.size() == 1) {
-+    auto img = QImage::fromData(singleImageData);
-+    if (!img.isNull()) {
-+      composite->setImageData(img);
-+      composite->setData(singleImageMime, singleImageData);
-+    }
-+  }
-+
-+  return composite;
-+}
-+
-+bool ClipboardService::copyMultipleSelections(const std::vector<QString> &ids,
-+                                              const Clipboard::CopyOptions &options) {
-+  std::vector<ClipboardSelection> selections;
-+
-+  for (const auto &id : ids) {
-+    if (auto sel = retrieveSelectionById(id)) {
-+      qDebug() << "copyMultipleSelections: Retrieved selection" << id << "with" << sel->offers.size() << "offers";
-+      for (const auto &offer : sel->offers) {
-+        qDebug() << "  - offer:" << offer.mimeType << "size:" << offer.data.size();
-+      }
-+      selections.push_back(*sel);
-+    } else {
-+      qWarning() << "copyMultipleSelections: Failed to retrieve selection" << id;
-+    }
-+  }
-+
-+  if (selections.empty()) return false;
-+
-+  return copyQMimeData(buildCompositeSelection(selections), options);
-+}
-+
- AbstractClipboardServer *ClipboardService::clipboardServer() const { return m_clipboardServer.get(); }
- 
- ClipboardService::ClipboardService(const std::filesystem::path &path, WindowManager &wm, AppService &appDb)
-@@ -640,4 +858,29 @@ ClipboardService::ClipboardService(const std::filesystem::path &path, WindowMana
+   int imageCount = 0;
+   QByteArray singleImageData;
+   QString singleImageMime;
+@@ -852,4 +858,29 @@ ClipboardService::ClipboardService(const std::filesystem::path &path, WindowMana
  
    connect(m_clipboardServer.get(), &AbstractClipboardServer::selectionAdded, this,
            &ClipboardService::saveSelection);
@@ -1437,7 +325,7 @@ index 44401239..3acf070e 100644
 +  }
  }
 diff --git a/vicinae/src/services/clipboard/clipboard-service.hpp b/vicinae/src/services/clipboard/clipboard-service.hpp
-index 2283478b..38a80e2d 100644
+index 237919e1..38a80e2d 100644
 --- a/vicinae/src/services/clipboard/clipboard-service.hpp
 +++ b/vicinae/src/services/clipboard/clipboard-service.hpp
 @@ -92,6 +92,7 @@ public:
@@ -1448,25 +336,7 @@ index 2283478b..38a80e2d 100644
  
    static QString readText();
    static Clipboard::ReadContent readContent();
-@@ -124,6 +125,17 @@ public:
-   bool copySelection(const ClipboardSelection &selection, const Clipboard::CopyOptions &options);
-   bool copyQMimeData(QMimeData *data, const Clipboard::CopyOptions &options = {});
- 
-+  /**
-+   * Copy multiple clipboard selections as a single composite selection.
-+   * The selections are combined into rich HTML with images embedded as data URIs,
-+   * enabling pasting to apps like Notion that support HTML.
-+   * @param ids The selection IDs to copy, in the order they should appear
-+   * @param options Copy options
-+   * @return true if successful
-+   */
-+  bool copyMultipleSelections(const std::vector<QString> &ids,
-+                              const Clipboard::CopyOptions &options = {});
-+
-   /**
-    * Whether we have a working clipboard server implementation to use.
-    * This does not take into account the current monitoring preference, only
-@@ -134,6 +146,7 @@ public:
+@@ -145,6 +146,7 @@ public:
    void setMonitoring(bool value);
    void setEncryption(bool value);
    void setIgnorePasswords(bool value);
@@ -1474,7 +344,7 @@ index 2283478b..38a80e2d 100644
    bool isEncryptionReady() const;
  
  private:
-@@ -159,17 +172,27 @@ private:
+@@ -170,7 +172,7 @@ private:
     * Sanitize the passed selection by removing duplicate offers.
     * The selection is sanitized in place, no copy is made.
     */
@@ -1483,18 +353,7 @@ index 2283478b..38a80e2d 100644
  
    std::expected<QByteArray, ClipboardService::OfferDecryptionError>
    decryptOffer(const QByteArray &data, ClipboardEncryptionType type) const;
- 
-   static ClipboardOfferKind getKind(const ClipboardDataOffer &offer);
- 
-+  /**
-+   * Build a composite QMimeData from multiple selections.
-+   * Combines text and HTML content, embeds images as data URIs.
-+   */
-+  static QMimeData *buildCompositeSelection(const std::vector<ClipboardSelection> &selections);
-+
-   WindowManager &m_wm;
-   AppService &m_appDb;
- 
+@@ -189,4 +191,8 @@ private:
    bool m_recordAllOffers = true;
    bool m_monitoring = false;
    bool m_ignorePasswords = true;
@@ -1503,146 +362,3 @@ index 2283478b..38a80e2d 100644
 +
 +  void checkServerHealth();
  };
-diff --git a/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp b/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp
-index fccdb6ff..9bb3de29 100644
---- a/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp
-+++ b/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp
-@@ -32,11 +32,12 @@ void TextFileViewer::updateStyle() {
- 
- TextFileViewer::TextFileViewer() : edit(new QTextEdit()) {
-   setAttribute(Qt::WA_TranslucentBackground, true);
--  edit->setFocusPolicy(Qt::FocusPolicy::NoFocus);
-+  edit->setFocusPolicy(Qt::FocusPolicy::ClickFocus);
-   edit->document()->setDocumentMargin(10);
-   edit->setTabStopDistance(40);
-   edit->setReadOnly(true);
-   edit->setVerticalScrollBar(new OmniScrollBar);
-+  edit->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-   updateStyle();
-   VStack().add(edit).imbue(this);
-   connect(&ThemeService::instance(), &ThemeService::themeChanged, this, [this]() { updateStyle(); });
-diff --git a/vicinae/src/ui/thumbnail/thumbnail.cpp b/vicinae/src/ui/thumbnail/thumbnail.cpp
-index 2440a504..f4a0d03f 100644
---- a/vicinae/src/ui/thumbnail/thumbnail.cpp
-+++ b/vicinae/src/ui/thumbnail/thumbnail.cpp
-@@ -1,5 +1,21 @@
- #include "thumbnail.hpp"
- 
-+void ImagePreviewDialogWidget::keyPressEvent(QKeyEvent *event) {
-+  switch (event->key()) {
-+  case Qt::Key_Escape:
-+  case Qt::Key_Up:
-+  case Qt::Key_Down:
-+  case Qt::Key_Left:
-+  case Qt::Key_Right:
-+    emit closeRequested();
-+    return;
-+  default:
-+    break;
-+  }
-+
-+  QWidget::keyPressEvent(event);
-+}
-+
- void Thumbnail::resizeEvent(QResizeEvent *event) {
-   QWidget::resizeEvent(event);
-   m_content->setFixedSize(size());
-@@ -13,9 +29,11 @@ void Thumbnail::paintEvent(QPaintEvent *event) {
- 
-   painter.setRenderHint(QPainter::Antialiasing);
- 
--  painter.setThemePen(SemanticColor::BackgroundBorder);
--  painter.setThemeBrush(SemanticColor::ListItemHoverBackground);
--  painter.drawRoundedRect(rect(), m_borderRadius, m_borderRadius);
-+  if (m_frameVisible) {
-+    painter.setThemePen(SemanticColor::BackgroundBorder);
-+    painter.setThemeBrush(SemanticColor::ListItemHoverBackground);
-+    painter.drawRoundedRect(rect(), m_borderRadius, m_borderRadius);
-+  }
- 
-   m_opacityEffect->setOpacity(underMouse() && m_clickable ? 0.8 : 1);
- 
-@@ -47,6 +65,11 @@ void Thumbnail::setClickable(bool clickable) {
-   update();
- }
- 
-+void Thumbnail::setFrameVisible(bool visible) {
-+  m_frameVisible = visible;
-+  update();
-+}
-+
- void Thumbnail::setImage(const ImageURL &url) {
-   m_content->setUrl(ImageURL(url).setMask(OmniPainter::RoundedRectangleMask));
- }
-@@ -94,5 +117,6 @@ void ImagePreviewDialogWidget::setAspectRatio(double ratio) { m_aspectRatio = ra
- 
- ImagePreviewDialogWidget::ImagePreviewDialogWidget(const ImageURL &icon) {
-   setupUI();
-+  m_thumbnail->setFrameVisible(false);
-   m_thumbnail->setImage(icon);
- }
-diff --git a/vicinae/src/ui/thumbnail/thumbnail.hpp b/vicinae/src/ui/thumbnail/thumbnail.hpp
-index 431b80a3..3cda84db 100644
---- a/vicinae/src/ui/thumbnail/thumbnail.hpp
-+++ b/vicinae/src/ui/thumbnail/thumbnail.hpp
-@@ -20,6 +20,7 @@ class Thumbnail : public QWidget {
-   ImageWidget *m_content = new ImageWidget(this);
-   ImageWidget *m_placeholder = new ImageWidget(this);
-   int m_borderRadius = 20;
-+  bool m_frameVisible = true;
-   bool m_clickable = false;
-   QGraphicsOpacityEffect *m_opacityEffect = new QGraphicsOpacityEffect(this);
- 
-@@ -30,6 +31,7 @@ class Thumbnail : public QWidget {
- 
- public:
-   void setClickable(bool clickable);
-+  void setFrameVisible(bool visible);
-   void setImage(const ImageURL &url);
-   void setRadius(int radius);
- 
-@@ -44,6 +46,9 @@ class ImagePreviewDialogWidget : public DialogContentWidget {
-   int m_padding = 20;
-   double m_aspectRatio = 16 / 9.f;
- 
-+protected:
-+  void keyPressEvent(QKeyEvent *event) override;
-+
-   void resizeEvent(QResizeEvent *event) override;
-   QSize sizeHint() const override;
-   QSize minimumSizeHint() const override;
-diff --git a/vicinae/src/ui/vlist/common/section-model.hpp b/vicinae/src/ui/vlist/common/section-model.hpp
-index 495b156d..a3825090 100644
---- a/vicinae/src/ui/vlist/common/section-model.hpp
-+++ b/vicinae/src/ui/vlist/common/section-model.hpp
-@@ -26,7 +26,7 @@ public:
-   virtual std::string_view sectionName(SectionId id) const = 0;
- 
-   virtual WidgetType *createItemWidget(const ItemType &type) const = 0;
--  virtual void refreshItemWidget(const ItemType &type, WidgetType *widget) const = 0;
-+  virtual void refreshItemWidget(const ItemType &type, WidgetType *widget, int index) const = 0;
- 
-   virtual StableID stableId(const ItemType &item) const = 0;
-   virtual WidgetTag widgetTag(const ItemType &item) const { return InvalidTag; }
-@@ -127,7 +127,7 @@ protected:
-                                      static_cast<OmniListSectionHeader *>(widget)->setTitle(
-                                          parseSectionName(header.name, header.count));
-                                    },
--                                   [&](const SectionItem &item) { refreshItemWidget(item.data, widget); }};
-+                                   [&, idx](const SectionItem &item) { refreshItemWidget(item.data, widget, idx); }};
-     return std::visit(visitor, fromFlatIndex(idx));
-   }
- 
-diff --git a/vicinae/src/ui/vlist/common/vertical-list-model.hpp b/vicinae/src/ui/vlist/common/vertical-list-model.hpp
-index 741a9ea4..1dca9f14 100644
---- a/vicinae/src/ui/vlist/common/vertical-list-model.hpp
-+++ b/vicinae/src/ui/vlist/common/vertical-list-model.hpp
-@@ -38,7 +38,7 @@ public:
-     return new DefaultListItemWidget;
-   }
- 
--  virtual void refreshItemWidget(const ItemType &item, VListModel::WidgetType *widget) const final override {
-+  virtual void refreshItemWidget(const ItemType &item, VListModel::WidgetType *widget, int index) const final override {
-     auto w = static_cast<DefaultListItemWidget *>(widget);
-     ItemData data = createItemData(item);
-     w->setName(data.title);
