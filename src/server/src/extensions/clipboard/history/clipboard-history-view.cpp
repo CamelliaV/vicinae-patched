@@ -867,16 +867,35 @@ void ClipboardHistoryView::initialize() {
             m_statusToolbar->setLeftText(QString("%1 Items").arg(page.totalCount));
           });
 
-  // Handle Shift+Click for multi-select
+  // Handle Shift+Click for range selection
   connect(m_model, &ClipboardHistoryModel::itemShiftClicked, this, [this](const QString &id, int index) {
-    qDebug() << "ClipboardHistoryView: Received itemShiftClicked for" << id << "at index" << index;
+    if (!m_multiSelectMode) { m_multiSelectMode = true; }
+    if (m_rangeAnchorIndex < 0) {
+      // First shift+click sets anchor
+      m_rangeAnchorIndex = index;
+      if (!isItemSelected(id)) toggleItemSelection(id);
+    } else {
+      // Second shift+click selects range
+      int start = std::min(m_rangeAnchorIndex, index);
+      int end = std::max(m_rangeAnchorIndex, index);
+      for (int i = start; i <= end; ++i) {
+        if (auto item = m_model->fromIndex(i)) {
+          if (!isItemSelected((*item)->id)) toggleItemSelection((*item)->id);
+        }
+      }
+      m_rangeAnchorIndex = -1;
+    }
+    updateMultiSelectStatusText();
+    if (index >= 0) m_list->setSelected(index);
+  });
+
+  // Handle Ctrl+Click for single item toggle
+  connect(m_model, &ClipboardHistoryModel::itemCtrlClicked, this, [this](const QString &id, int index) {
     if (!m_multiSelectMode) { m_multiSelectMode = true; }
     toggleItemSelection(id);
+    m_rangeAnchorIndex = -1;  // Reset range anchor on ctrl+click
     updateMultiSelectStatusText();
-    // Also select the item in the list so the action panel updates
-    if (index >= 0) {
-      m_list->setSelected(index);
-    }
+    if (index >= 0) m_list->setSelected(index);
   });
 
   // Handle multi-selection changes - refresh widgets without scrolling
@@ -887,6 +906,7 @@ void ClipboardHistoryView::initialize() {
     if (!visible && m_multiSelectMode) {
       m_multiSelectMode = false;
       m_selectedIds.clear();
+      m_rangeAnchorIndex = -1;
       m_model->setMultiSelectedIds(m_selectedIds);
       // Reload to refresh the status text with item count
       m_controller->reloadSearch();
@@ -1075,6 +1095,7 @@ void ClipboardHistoryView::onDeactivate() {
   if (m_multiSelectMode) {
     m_multiSelectMode = false;
     m_selectedIds.clear();
+    m_rangeAnchorIndex = -1;
     m_model->setMultiSelectedIds(m_selectedIds);
     // Reload to refresh the status text with item count
     m_controller->reloadSearch();
@@ -1138,6 +1159,7 @@ void ClipboardHistoryView::toggleMultiSelectMode() {
   if (!m_multiSelectMode) {
     // Exiting multi-select mode - clear all selections
     m_selectedIds.clear();
+    m_rangeAnchorIndex = -1;
     m_model->setMultiSelectedIds(m_selectedIds);
     // Refresh the list to remove checkmarks and restore normal item count display
     m_list->refreshAll();
@@ -1167,14 +1189,17 @@ bool ClipboardHistoryView::isItemSelected(const QString &id) const {
 
 void ClipboardHistoryView::clearMultiSelection() {
   m_selectedIds.clear();
+  m_rangeAnchorIndex = -1;
   updateMultiSelectStatusText();
   m_model->setMultiSelectedIds(m_selectedIds);
 }
 
 void ClipboardHistoryView::updateMultiSelectStatusText() {
   if (m_multiSelectMode) {
-    if (m_selectedIds.empty()) {
-      m_statusToolbar->setLeftText("Multi-select: Press Space to select items");
+    if (m_rangeAnchorIndex >= 0) {
+      m_statusToolbar->setLeftText(QString("Range select: Shift+Click end item (%1 selected)").arg(m_selectedIds.size()));
+    } else if (m_selectedIds.empty()) {
+      m_statusToolbar->setLeftText("Multi-select: Shift+Click for range, Ctrl+Click for single");
     } else {
       m_statusToolbar->setLeftText(QString("Multi-select: %1 item(s) selected").arg(m_selectedIds.size()));
     }

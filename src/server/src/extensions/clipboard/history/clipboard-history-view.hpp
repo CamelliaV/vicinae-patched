@@ -144,4 +144,5 @@ private:
   // Multi-select state
   bool m_multiSelectMode = false;
   std::vector<QString> m_selectedIds;
+  int m_rangeAnchorIndex = -1;  // For Shift+Click range selection
 };

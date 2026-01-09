@@ -14,6 +14,7 @@ class ClipboardHistoryItemWidget : public SelectableOmniListWidget {
 
 signals:
   void shiftClicked(int index);
+  void ctrlClicked(int index);
 
 public:
   void setEntry(const ClipboardHistoryEntry &entry, bool isMultiSelected = false, int index = -1) {
@@ -35,8 +36,12 @@ public:
 protected:
   void mousePressEvent(QMouseEvent *event) override {
     if (event->button() == Qt::LeftButton && event->modifiers() & Qt::ShiftModifier) {
-      qDebug() << "ClipboardHistoryItemWidget: Shift+Click detected, emitting shiftClicked for" << m_entryId << "at index" << m_index;
       emit shiftClicked(m_index);
+      event->accept();
+      return;
+    }
+    if (event->button() == Qt::LeftButton && event->modifiers() & Qt::ControlModifier) {
+      emit ctrlClicked(m_index);
       event->accept();
       return;
     }
@@ -100,6 +105,7 @@ class ClipboardHistoryModel
 
 signals:
   void itemShiftClicked(const QString &id, int index) const;
+  void itemCtrlClicked(const QString &id, int index) const;
   void multiSelectionChanged() const;
 
 public:
@@ -141,6 +147,9 @@ protected:
     auto widget = new ClipboardHistoryItemWidget;
     connect(widget, &ClipboardHistoryItemWidget::shiftClicked, this, [this, widget](int index) {
       emit itemShiftClicked(widget->entryId(), index);
+    });
+    connect(widget, &ClipboardHistoryItemWidget::ctrlClicked, this, [this, widget](int index) {
+      emit itemCtrlClicked(widget->entryId(), index);
     });
     return widget;
   }
