@@ -737,17 +737,25 @@ public:
 class PasteMultipleSelectionsAction : public PasteToFocusedWindowAction {
   std::vector<QString> m_ids;
   ClipboardHistoryView &m_view;
+  bool m_reverse;
 
   void execute(ApplicationContext *ctx) override {
-    ctx->services->clipman()->copyMultipleSelections(m_ids, {.concealed = true});
+    auto ids = m_ids;
+    if (m_reverse) std::reverse(ids.begin(), ids.end());
+    ctx->services->clipman()->copyMultipleSelections(ids, {.concealed = true});
     m_view.clearMultiSelection();
-    PasteToFocusedWindowAction::execute(ctx);
+    ctx->navigation->closeWindow();
+    auto wm = ctx->services->windowManager();
+    if (wm->canPaste()) {
+      QTimer::singleShot(Environment::pasteDelay(), [wm]() { wm->provider()->pasteToWindow(nullptr, nullptr); });
+    }
   }
 
 public:
-  PasteMultipleSelectionsAction(ClipboardHistoryView &view, const std::vector<QString> &ids)
-      : PasteToFocusedWindowAction(), m_ids(ids), m_view(view) {
-    m_title = QString("Paste %1 items").arg(ids.size());
+  PasteMultipleSelectionsAction(ClipboardHistoryView &view, const std::vector<QString> &ids, bool reverse = false)
+      : PasteToFocusedWindowAction(), m_ids(ids), m_view(view), m_reverse(reverse) {
+    m_title = reverse ? QString("Paste %1 items (reverse)").arg(ids.size())
+                      : QString("Paste %1 items").arg(ids.size());
   }
 };
 
@@ -929,11 +937,16 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const 
             new PasteMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
         pasteMultiple->addShortcut(Keybind::PasteAction);
 
+        auto pasteMultipleReverse =
+            new PasteMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds, true);
+        pasteMultipleReverse->setShortcut(Keyboard::Shortcut(Qt::Key_Return, Qt::ControlModifier));
+
         auto pasteMultipleAsText =
             new PasteMultipleSelectionsAsTextAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
         pasteMultipleAsText->setShortcut(Keyboard::Shortcut(Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier));
 
         mainSection->addAction(pasteMultiple);
+        mainSection->addAction(pasteMultipleReverse);
         mainSection->addAction(copyMultiple);
         mainSection->addAction(pasteMultipleAsText);
       } else {
@@ -1191,6 +1204,28 @@ bool ClipboardHistoryView::inputFilter(QKeyEvent *event) {
         updateMultiSelectStatusText();
         return true;
       }
+    }
+  }
+
+  // Handle Ctrl+Enter for reverse paste in multi-select mode
+  if (m_multiSelectMode && !m_selectedIds.empty() &&
+      event->key() == Qt::Key_Return && event->modifiers() == Qt::ControlModifier) {
+    auto clipman = context()->services->clipman();
+    auto wm = context()->services->windowManager();
+    auto ids = m_selectedIds;
+    auto selectedCount = ids.size();
+    std::reverse(ids.begin(), ids.end());
+    if (clipman->copyMultipleSelections(ids, {.concealed = true})) {
+      clearMultiSelection();
+      m_multiSelectMode = false;
+      m_controller->reloadSearch();
+      if (wm->canPaste()) {
+        context()->navigation->closeWindow();
+        QTimer::singleShot(Environment::pasteDelay(), [wm]() { wm->provider()->pasteToWindow(nullptr, nullptr); });
+      } else {
+        context()->navigation->showHud(QString("%1 items copied to clipboard (reverse)").arg(selectedCount));
+      }
+      return true;
     }
   }
 

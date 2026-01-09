@@ -70,6 +70,7 @@ void ClipboardExtension::preferenceValuesChanged(const QJsonObject &value) const
   clipman->setMonitoring(value.value("monitoring").toBool());
   clipman->setEncryption(value.value("encryption").toBool());
   clipman->setIgnorePasswords(value.value("ignorePasswords").toBool());
+  clipman->setAutoPathToUri(value.value("autoPathToUri").toBool());
 }
 
 std::vector<Preference> ClipboardExtension::preferences() const {
@@ -77,6 +78,7 @@ std::vector<Preference> ClipboardExtension::preferences() const {
   auto monitoring = Preference::makeCheckbox("monitoring");
   auto eraseOnStartup = Preference::makeCheckbox("eraseOnStartup");
   auto ignorePasswords = Preference::makeCheckbox("ignorePasswords");
+  auto autoPathToUri = Preference::makeCheckbox("autoPathToUri");
 
   eraseOnStartup.setTitle("Erase on startup");
   eraseOnStartup.setDescription("Erase clipboard history every time the vicinae server is started");
@@ -100,5 +102,10 @@ std::vector<Preference> ClipboardExtension::preferences() const {
                             "performed while this is turned off will not be recorded.");
   monitoring.setDefaultValue(true);
 
-  return {monitoring, ignorePasswords, eraseOnStartup, encryption};
+  autoPathToUri.setTitle("Auto convert path to URI");
+  autoPathToUri.setDescription("Automatically convert plain file paths to file:// URIs when copying. "
+                               "Some screenshot tools copy file paths as plain text instead of URIs.");
+  autoPathToUri.setDefaultValue(false);
+
+  return {monitoring, ignorePasswords, eraseOnStartup, encryption, autoPathToUri};
 }

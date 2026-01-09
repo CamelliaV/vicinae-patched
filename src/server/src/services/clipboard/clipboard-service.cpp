@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <numeric>
 #include <qapplication.h>
+#include <QTimer>
 #include "environment.hpp"
 #include "services/app-service/abstract-app-db.hpp"
 #include "x11/x11-clipboard-server.hpp"
@@ -130,6 +131,8 @@ void ClipboardService::setEncryption(bool value) {
 bool ClipboardService::isEncryptionReady() const { return m_encrypter.get(); }
 
 void ClipboardService::setIgnorePasswords(bool value) { m_ignorePasswords = value; }
+
+void ClipboardService::setAutoPathToUri(bool value) { m_autoPathToUri = value; }
 
 void ClipboardService::setMonitoring(bool value) {
   if (m_monitoring == value) return;
@@ -344,6 +347,9 @@ ClipboardSelection &ClipboardService::sanitizeSelection(ClipboardSelection &sele
     return std::ranges::lexicographical_compare(a.mimeType, b.mimeType);
   });
   std::ranges::unique(selection.offers, [](auto &&a, auto &&b) { return a.mimeType == b.mimeType; });
+
+  // Skip path-to-URI conversion if disabled
+  if (!m_autoPathToUri) return selection;
 
   // Check if there's already a text/uri-list with file:// URIs - if so, skip conversion
   bool alreadyHasFileUri = std::ranges::any_of(selection.offers, [](const auto &offer) {
@@ -705,7 +711,7 @@ QMimeData *ClipboardService::buildCompositeSelection(const std::vector<Clipboard
   QMimeData *composite = new QMimeData;
   QString combinedText;
   QString combinedHtml = "<div style=\"font-family: sans-serif;\">";
-  QStringList fileUris;  // Collect file:// URIs for text/uri-list
+  QStringList fileUris;
   int imageCount = 0;
   QByteArray singleImageData;
   QString singleImageMime;
@@ -850,4 +856,29 @@ ClipboardService::ClipboardService(const std::filesystem::path &path, WindowMana
 
   connect(m_clipboardServer.get(), &AbstractClipboardServer::selectionAdded, this,
           &ClipboardService::saveSelection);
+
+  // Health check timer to auto-recover from KDE crashes
+  m_healthCheckTimer = new QTimer(this);
+  connect(m_healthCheckTimer, &QTimer::timeout, this, &ClipboardService::checkServerHealth);
+  m_healthCheckTimer->start(5000); // Check every 5 seconds
+}
+
+ClipboardService::~ClipboardService() {
+  if (m_healthCheckTimer) {
+    m_healthCheckTimer->stop();
+  }
+}
+
+void ClipboardService::checkServerHealth() {
+  if (!m_monitoring) return;
+
+  if (!m_clipboardServer->isAlive()) {
+    qWarning() << "Clipboard server" << m_clipboardServer->id() << "is not alive, attempting restart...";
+    m_clipboardServer->stop();
+    if (m_clipboardServer->start()) {
+      qInfo() << "Clipboard server" << m_clipboardServer->id() << "restarted successfully.";
+    } else {
+      qWarning() << "Failed to restart clipboard server" << m_clipboardServer->id();
+    }
+  }
 }

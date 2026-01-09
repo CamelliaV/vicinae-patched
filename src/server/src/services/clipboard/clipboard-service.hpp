@@ -92,6 +92,7 @@ public:
   };
 
   ClipboardService(const std::filesystem::path &path, WindowManager &wm, AppService &appDb);
+  ~ClipboardService();
 
   static QString readText();
   static Clipboard::ReadContent readContent();
@@ -145,6 +146,7 @@ public:
   void setMonitoring(bool value);
   void setEncryption(bool value);
   void setIgnorePasswords(bool value);
+  void setAutoPathToUri(bool value);
   bool isEncryptionReady() const;
 
 private:
@@ -170,7 +172,7 @@ private:
    * Sanitize the passed selection by removing duplicate offers.
    * The selection is sanitized in place, no copy is made.
    */
-  static ClipboardSelection &sanitizeSelection(ClipboardSelection &selection);
+  ClipboardSelection &sanitizeSelection(ClipboardSelection &selection);
 
   std::expected<QByteArray, ClipboardService::OfferDecryptionError>
   decryptOffer(const QByteArray &data, ClipboardEncryptionType type) const;
@@ -189,4 +191,8 @@ private:
   bool m_recordAllOffers = true;
   bool m_monitoring = false;
   bool m_ignorePasswords = true;
+  bool m_autoPathToUri = false;
+  QTimer *m_healthCheckTimer = nullptr;
+
+  void checkServerHealth();
 };
