@@ -1,27 +1,29 @@
 # Vicinae Patched
 
-A fork of [Vicinae](https://github.com/vicinaehq/vicinae) with additional enhancements for clipboard and file management.
+A fork of [Vicinae](https://github.com/vicinaehq/vicinae) with additional enhancements for clipboard management.
 
 ## Enhancements
 
-- **Multi-paste**: Paste multiple clipboard items at once
-- **Paste as text**: Strip formatting when pasting
-- **Image preview**: Preview images in clipboard history and file search
-- **Reveal in file explorer**: Open file location in your file manager
+### Clipboard Multi-Select
+- **Range selection**: Shift+Click to select start item, Shift+Click again to select all items in range
+- **Single item toggle**: Ctrl+Click to select/deselect individual items (for non-adjacent selection)
+- **Multi-paste**: Enter to paste all selected items, Ctrl+Enter for reverse order
+- **Multi-delete**: Ctrl+X to delete all selected items at once
+- **Paste as text**: Ctrl+Shift+V to paste multiple items as combined text
+
+### Clipboard Service
+- **Auto path-to-URI toggle**: Option to auto-convert file paths to URIs (disabled by default)
+- **Auto-recovery**: Automatically restarts clipboard monitoring after KDE crashes
+
+### Build Optimizations
+- Zen4 architecture optimizations (-march=znver4)
+- LTO enabled for better performance
 
 ## Installation (Arch Linux)
 
 ```bash
 git clone https://github.com/CamelliaV/vicinae-patched.git
 cd vicinae-patched
-makepkg -si
-```
-
-## Building
-
-Requires: cmake, ninja, nodejs, npm, qt6, and other dependencies listed in PKGBUILD.
-
-```bash
 makepkg -si
 ```
 

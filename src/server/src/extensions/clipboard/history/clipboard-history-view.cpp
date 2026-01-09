@@ -781,6 +781,33 @@ public:
         m_ids(ids), m_view(view) {}
 };
 
+class RemoveMultipleSelectionsAction : public AbstractAction {
+  std::vector<QString> m_ids;
+  ClipboardHistoryView &m_view;
+
+  void execute(ApplicationContext *ctx) override {
+    auto clipman = ctx->services->clipman();
+    auto toast = ctx->services->toastService();
+    int removed = 0;
+    for (const auto &id : m_ids) {
+      if (clipman->removeSelection(id)) removed++;
+    }
+    m_view.clearMultiSelection();
+    if (removed > 0) {
+      toast->setToast(QString("%1 entries removed").arg(removed));
+    } else {
+      toast->setToast("Failed to remove entries", ToastStyle::Danger);
+    }
+  }
+
+public:
+  RemoveMultipleSelectionsAction(ClipboardHistoryView &view, const std::vector<QString> &ids)
+      : AbstractAction(QString("Remove %1 items").arg(ids.size()), ImageURL::builtin("trash")),
+        m_ids(ids), m_view(view) {
+    setStyle(AbstractAction::Style::Danger);
+  }
+};
+
 class RemoveAllSelectionsAction : public AbstractAction {
   void execute(ApplicationContext *ctx) override {
     auto alert = new CallbackAlertWidget();
@@ -952,6 +979,10 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const 
           new CopyMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
       copyMultiple->addShortcut(Keybind::CopyAction);
 
+      auto removeMultiple =
+          new RemoveMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
+      removeMultiple->setShortcut(Keybind::RemoveAction);
+
       if (wm->canPaste()) {
         auto pasteMultiple =
             new PasteMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
@@ -969,8 +1000,10 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const 
         mainSection->addAction(pasteMultipleReverse);
         mainSection->addAction(copyMultiple);
         mainSection->addAction(pasteMultipleAsText);
+        mainSection->addAction(removeMultiple);
       } else {
         mainSection->addAction(copyMultiple);
+        mainSection->addAction(removeMultiple);
       }
     }
   }
