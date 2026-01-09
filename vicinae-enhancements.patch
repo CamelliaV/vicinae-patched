@@ -176,7 +176,7 @@ index c2031477..376f596b 100644
 +  std::vector<QString> m_multiSelectedIds;
  };
 diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp b/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
-index 72a89e9e..9b17753e 100644
+index 72a89e9e..7946d978 100644
 --- a/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
 +++ b/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
 @@ -1,9 +1,12 @@
@@ -192,7 +192,7 @@ index 72a89e9e..9b17753e 100644
  #include "navigation-controller.hpp"
  #include "services/clipboard/clipboard-db.hpp"
  #include "services/clipboard/clipboard-service.hpp"
-@@ -18,10 +21,20 @@
+@@ -18,11 +21,22 @@
  #include "ui/form/text-area.hpp"
  #include "ui/views/form-view.hpp"
  #include "utils.hpp"
@@ -211,9 +211,11 @@ index 72a89e9e..9b17753e 100644
 +#include <qscrollarea.h>
 +#include <qscrollbar.h>
  #include <qwidget.h>
++#include <QDesktopServices>
  #include <filesystem>
  #include <system_error>
-@@ -53,6 +66,57 @@ public:
+ 
+@@ -53,6 +67,57 @@ public:
    PasteClipboardSelection(const QString &id) : PasteToFocusedWindowAction(), m_id(id) {}
  };
  
@@ -271,7 +273,7 @@ index 72a89e9e..9b17753e 100644
  class CopyClipboardSelection : public AbstractAction {
    QString m_id;
  
-@@ -73,6 +137,232 @@ public:
+@@ -73,6 +138,232 @@ public:
        : AbstractAction("Copy to clipboard", BuiltinIcon::CopyClipboard), m_id(id) {}
  };
  
@@ -504,7 +506,7 @@ index 72a89e9e..9b17753e 100644
  class ClipboardHistoryDetail : public DetailWidget {
    QTemporaryFile m_tmpFile;
  
-@@ -106,10 +396,18 @@ class ClipboardHistoryDetail : public DetailWidget {
+@@ -106,10 +397,18 @@ class ClipboardHistoryDetail : public DetailWidget {
      auto mime = QMimeDatabase().mimeTypeForFile(path.c_str());
  
      if (mime.name().startsWith("image/")) {
@@ -527,7 +529,7 @@ index 72a89e9e..9b17753e 100644
      }
  
      if (Utils::isTextMimeType(mime)) {
-@@ -153,10 +451,18 @@ class ClipboardHistoryDetail : public DetailWidget {
+@@ -153,10 +452,18 @@ class ClipboardHistoryDetail : public DetailWidget {
  
        m_tmpFile.write(data);
        m_tmpFile.close();
@@ -550,7 +552,7 @@ index 72a89e9e..9b17753e 100644
      }
  
      if (Utils::isTextMimeType(mimeName) || mimeName == "text/uri-list") {
-@@ -306,6 +612,202 @@ public:
+@@ -306,6 +613,215 @@ public:
    EditClipboardKeywordsAction(const QString &id) : PushAction(id) {}
  };
  
@@ -596,6 +598,19 @@ index 72a89e9e..9b17753e 100644
 +public:
 +  RevealInFileExplorerAction(const QString &id, const std::filesystem::path &path)
 +      : AbstractAction("Reveal in file explorer", ImageURL::builtin("folder")), m_id(id), m_path(path) {}
++};
++
++class OpenLinkInBrowserAction : public AbstractAction {
++  QString m_url;
++
++  void execute(ApplicationContext *ctx) override {
++    ctx->services->appDb()->launchRaw({"xdg-open", m_url});
++    ctx->navigation->closeWindow();
++  }
++
++public:
++  OpenLinkInBrowserAction(const QString &url)
++      : AbstractAction("Open in browser", ImageURL::builtin("link")), m_url(url) {}
 +};
 +
 +class ToggleMultiSelectModeAction : public AbstractAction {
@@ -753,7 +768,7 @@ index 72a89e9e..9b17753e 100644
  class RemoveAllSelectionsAction : public AbstractAction {
    void execute(ApplicationContext *ctx) override {
      auto alert = new CallbackAlertWidget();
-@@ -389,6 +891,52 @@ void ClipboardHistoryView::initialize() {
+@@ -389,6 +905,52 @@ void ClipboardHistoryView::initialize() {
            [this](const PaginatedResponse<ClipboardHistoryEntry> &page) {
              m_statusToolbar->setLeftText(QString("%1 Items").arg(page.totalCount));
            });
@@ -806,7 +821,7 @@ index 72a89e9e..9b17753e 100644
  }
  
  std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const ItemType &info) const {
-@@ -411,28 +959,149 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const
+@@ -411,28 +973,162 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const
    removeAll->setShortcut(Keybind::DangerousRemoveAction);
    pin->setShortcut(Keybind::PinAction);
  
@@ -954,10 +969,23 @@ index 72a89e9e..9b17753e 100644
 +    }
 +  }
 +
++  // Add open in browser action for Link items
++  if (info->kind == ClipboardOfferKind::Link) {
++    auto data = clipman->getMainOfferData(info->id);
++    if (data) {
++      QString text = QString::fromUtf8(data.value()).trimmed();
++      if (!text.isEmpty()) {
++        auto openLink = new OpenLinkInBrowserAction(text);
++        openLink->setShortcut(Keyboard::Shortcut(Qt::Key_R, Qt::ControlModifier | Qt::AltModifier));
++        toolsSection->addAction(openLink);
++      }
++    }
++  }
++
    toolsSection->addAction(pin);
    toolsSection->addAction(editKeywords);
    dangerSection->addAction(remove);
-@@ -452,6 +1121,19 @@ void ClipboardHistoryView::textChanged(const QString &value) {
+@@ -452,6 +1148,19 @@ void ClipboardHistoryView::textChanged(const QString &value) {
    m_list->selectFirst();
  }
  
@@ -977,7 +1005,7 @@ index 72a89e9e..9b17753e 100644
  void ClipboardHistoryView::handleMonitoringChanged(bool monitor) {
    if (monitor) {
      m_statusToolbar->setClipboardStatus(ClipboardStatusToolbar::ClipboardStatus::Monitoring);
-@@ -501,3 +1183,136 @@ std::optional<QString> ClipboardHistoryView::getSavedDropdownFilter() {
+@@ -501,3 +1210,163 @@ std::optional<QString> ClipboardHistoryView::getSavedDropdownFilter() {
  
    return value.toString();
  }
@@ -1036,6 +1064,33 @@ index 72a89e9e..9b17753e 100644
 +}
 +
 +bool ClipboardHistoryView::inputFilter(QKeyEvent *event) {
++  // Handle PageUp/PageDown for page scrolling
++  if (event->key() == Qt::Key_PageUp) {
++    int pageSize = std::max(1, static_cast<int>(m_list->visibleItems().size()) - 1);
++    if (auto idx = m_list->currentSelection()) {
++      int newIdx = std::max(0, *idx - pageSize);
++      m_list->setSelected(newIdx);
++    }
++    return true;
++  }
++  if (event->key() == Qt::Key_PageDown) {
++    int pageSize = std::max(1, static_cast<int>(m_list->visibleItems().size()) - 1);
++    if (auto idx = m_list->currentSelection()) {
++      m_list->setSelected(*idx + pageSize);
++    }
++    return true;
++  }
++
++  // Handle Home/End for jumping to first/last item
++  if (event->key() == Qt::Key_Home) {
++    m_list->selectFirst();
++    return true;
++  }
++  if (event->key() == Qt::Key_End) {
++    m_list->selectLast();
++    return true;
++  }
++
 +  // Handle Space for toggling selection in multi-select mode
 +  if (m_multiSelectMode && event->key() == Qt::Key_Space && event->modifiers() == Qt::NoModifier) {
 +    if (auto idx = m_list->currentSelection()) {
