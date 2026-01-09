@@ -11,6 +11,38 @@ index c55d0c91..4325aa4f 100644
      auto w = static_cast<DefaultListItemWidget *>(widget);
      w->setName(type->title.c_str());
      w->setSubtitle(type->subtitle);
+diff --git a/vicinae/src/extensions/clipboard/clipboard-extension.cpp b/vicinae/src/extensions/clipboard/clipboard-extension.cpp
+index 86da0231..01e02352 100644
+--- a/vicinae/src/extensions/clipboard/clipboard-extension.cpp
++++ b/vicinae/src/extensions/clipboard/clipboard-extension.cpp
+@@ -43,6 +43,7 @@ void ClipboardExtension::preferenceValuesChanged(const QJsonObject &value) const
+   clipman->setMonitoring(value.value("monitoring").toBool());
+   clipman->setEncryption(value.value("encryption").toBool());
+   clipman->setIgnorePasswords(value.value("ignorePasswords").toBool());
++  clipman->setAutoPathToUri(value.value("autoPathToUri").toBool());
+ }
+ 
+ std::vector<Preference> ClipboardExtension::preferences() const {
+@@ -50,6 +51,7 @@ std::vector<Preference> ClipboardExtension::preferences() const {
+   auto monitoring = Preference::makeCheckbox("monitoring");
+   auto eraseOnStartup = Preference::makeCheckbox("eraseOnStartup");
+   auto ignorePasswords = Preference::makeCheckbox("ignorePasswords");
++  auto autoPathToUri = Preference::makeCheckbox("autoPathToUri");
+ 
+   eraseOnStartup.setTitle("Erase on startup");
+   eraseOnStartup.setDescription("Erase clipboard history every time the vicinae server is started");
+@@ -73,5 +75,10 @@ std::vector<Preference> ClipboardExtension::preferences() const {
+                             "performed while this is turned off will not be recorded.");
+   monitoring.setDefaultValue(true);
+ 
+-  return {monitoring, ignorePasswords, eraseOnStartup, encryption};
++  autoPathToUri.setTitle("Auto convert path to URI");
++  autoPathToUri.setDescription("Automatically convert plain file paths to file:// URIs when copying. "
++                               "Some screenshot tools copy file paths as plain text instead of URIs.");
++  autoPathToUri.setDefaultValue(false);
++
++  return {monitoring, ignorePasswords, eraseOnStartup, encryption, autoPathToUri};
+ }
 diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp b/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp
 index c2031477..85fb7c45 100644
 --- a/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp
@@ -135,7 +167,7 @@ index c2031477..85fb7c45 100644
 +  std::vector<QString> m_multiSelectedIds;
  };
 diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp b/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
-index 72a89e9e..85448506 100644
+index 72a89e9e..c199213d 100644
 --- a/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
 +++ b/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
 @@ -1,9 +1,12 @@
@@ -509,7 +541,7 @@ index 72a89e9e..85448506 100644
      }
  
      if (Utils::isTextMimeType(mimeName) || mimeName == "text/uri-list") {
-@@ -306,6 +612,167 @@ public:
+@@ -306,6 +612,175 @@ public:
    EditClipboardKeywordsAction(const QString &id) : PushAction(id) {}
  };
  
@@ -638,17 +670,25 @@ index 72a89e9e..85448506 100644
 +class PasteMultipleSelectionsAction : public PasteToFocusedWindowAction {
 +  std::vector<QString> m_ids;
 +  ClipboardHistoryView &m_view;
++  bool m_reverse;
 +
 +  void execute(ApplicationContext *ctx) override {
-+    ctx->services->clipman()->copyMultipleSelections(m_ids, {.concealed = true});
++    auto ids = m_ids;
++    if (m_reverse) std::reverse(ids.begin(), ids.end());
++    ctx->services->clipman()->copyMultipleSelections(ids, {.concealed = true});
 +    m_view.clearMultiSelection();
-+    PasteToFocusedWindowAction::execute(ctx);
++    ctx->navigation->closeWindow();
++    auto wm = ctx->services->windowManager();
++    if (wm->canPaste()) {
++      QTimer::singleShot(Environment::pasteDelay(), [wm]() { wm->provider()->pasteToWindow(nullptr, nullptr); });
++    }
 +  }
 +
 +public:
-+  PasteMultipleSelectionsAction(ClipboardHistoryView &view, const std::vector<QString> &ids)
-+      : PasteToFocusedWindowAction(), m_ids(ids), m_view(view) {
-+    m_title = QString("Paste %1 items").arg(ids.size());
++  PasteMultipleSelectionsAction(ClipboardHistoryView &view, const std::vector<QString> &ids, bool reverse = false)
++      : PasteToFocusedWindowAction(), m_ids(ids), m_view(view), m_reverse(reverse) {
++    m_title = reverse ? QString("Paste %1 items (reverse)").arg(ids.size())
++                      : QString("Paste %1 items").arg(ids.size());
 +  }
 +};
 +
@@ -677,7 +717,7 @@ index 72a89e9e..85448506 100644
  class RemoveAllSelectionsAction : public AbstractAction {
    void execute(ApplicationContext *ctx) override {
      auto alert = new CallbackAlertWidget();
-@@ -389,6 +856,32 @@ void ClipboardHistoryView::initialize() {
+@@ -389,6 +864,32 @@ void ClipboardHistoryView::initialize() {
            [this](const PaginatedResponse<ClipboardHistoryEntry> &page) {
              m_statusToolbar->setLeftText(QString("%1 Items").arg(page.totalCount));
            });
@@ -710,7 +750,7 @@ index 72a89e9e..85448506 100644
  }
  
  std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const ItemType &info) const {
-@@ -411,28 +904,138 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const
+@@ -411,28 +912,143 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const
    removeAll->setShortcut(Keybind::DangerousRemoveAction);
    pin->setShortcut(Keybind::PinAction);
  
@@ -738,11 +778,16 @@ index 72a89e9e..85448506 100644
 +            new PasteMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
 +        pasteMultiple->addShortcut(Keybind::PasteAction);
 +
++        auto pasteMultipleReverse =
++            new PasteMultipleSelectionsAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds, true);
++        pasteMultipleReverse->setShortcut(Keyboard::Shortcut(Qt::Key_Return, Qt::ControlModifier));
++
 +        auto pasteMultipleAsText =
 +            new PasteMultipleSelectionsAsTextAction(*const_cast<ClipboardHistoryView *>(this), m_selectedIds);
 +        pasteMultipleAsText->setShortcut(Keyboard::Shortcut(Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier));
 +
 +        mainSection->addAction(pasteMultiple);
++        mainSection->addAction(pasteMultipleReverse);
 +        mainSection->addAction(copyMultiple);
 +        mainSection->addAction(pasteMultipleAsText);
 +      } else {
@@ -850,7 +895,7 @@ index 72a89e9e..85448506 100644
    toolsSection->addAction(pin);
    toolsSection->addAction(editKeywords);
    dangerSection->addAction(remove);
-@@ -452,6 +1055,18 @@ void ClipboardHistoryView::textChanged(const QString &value) {
+@@ -452,6 +1068,18 @@ void ClipboardHistoryView::textChanged(const QString &value) {
    m_list->selectFirst();
  }
  
@@ -869,7 +914,7 @@ index 72a89e9e..85448506 100644
  void ClipboardHistoryView::handleMonitoringChanged(bool monitor) {
    if (monitor) {
      m_statusToolbar->setClipboardStatus(ClipboardStatusToolbar::ClipboardStatus::Monitoring);
-@@ -501,3 +1116,110 @@ std::optional<QString> ClipboardHistoryView::getSavedDropdownFilter() {
+@@ -501,3 +1129,132 @@ std::optional<QString> ClipboardHistoryView::getSavedDropdownFilter() {
  
    return value.toString();
  }
@@ -946,6 +991,28 @@ index 72a89e9e..85448506 100644
 +        updateMultiSelectStatusText();
 +        return true;
 +      }
++    }
++  }
++
++  // Handle Ctrl+Enter for reverse paste in multi-select mode
++  if (m_multiSelectMode && !m_selectedIds.empty() &&
++      event->key() == Qt::Key_Return && event->modifiers() == Qt::ControlModifier) {
++    auto clipman = context()->services->clipman();
++    auto wm = context()->services->windowManager();
++    auto ids = m_selectedIds;
++    auto selectedCount = ids.size();
++    std::reverse(ids.begin(), ids.end());
++    if (clipman->copyMultipleSelections(ids, {.concealed = true})) {
++      clearMultiSelection();
++      m_multiSelectMode = false;
++      m_controller->reloadSearch();
++      if (wm->canPaste()) {
++        context()->navigation->closeWindow();
++        QTimer::singleShot(Environment::pasteDelay(), [wm]() { wm->provider()->pasteToWindow(nullptr, nullptr); });
++      } else {
++        context()->navigation->showHud(QString("%1 items copied to clipboard (reverse)").arg(selectedCount));
++      }
++      return true;
 +    }
 +  }
 +
@@ -1076,10 +1143,18 @@ index 843d0c0b..5299a801 100644
  
      item->setTitle(theme->name());
 diff --git a/vicinae/src/services/clipboard/clipboard-service.cpp b/vicinae/src/services/clipboard/clipboard-service.cpp
-index 44401239..adbe0410 100644
+index 44401239..3acf070e 100644
 --- a/vicinae/src/services/clipboard/clipboard-service.cpp
 +++ b/vicinae/src/services/clipboard/clipboard-service.cpp
-@@ -11,6 +11,7 @@
+@@ -3,6 +3,7 @@
+ #include <filesystem>
+ #include <numeric>
+ #include <qapplication.h>
++#include <QTimer>
+ #include "environment.hpp"
+ #include "services/app-service/abstract-app-db.hpp"
+ #include "x11/x11-clipboard-server.hpp"
+@@ -11,6 +12,7 @@
  #include <qlogging.h>
  #include <qmimedata.h>
  #include <qnamespace.h>
@@ -1087,10 +1162,22 @@ index 44401239..adbe0410 100644
  #include <qsqlquery.h>
  #include <qstringview.h>
  #include <qt6keychain/keychain.h>
-@@ -345,6 +346,79 @@ ClipboardSelection &ClipboardService::sanitizeSelection(ClipboardSelection &sele
+@@ -131,6 +133,8 @@ bool ClipboardService::isEncryptionReady() const { return m_encrypter.get(); }
+ 
+ void ClipboardService::setIgnorePasswords(bool value) { m_ignorePasswords = value; }
+ 
++void ClipboardService::setAutoPathToUri(bool value) { m_autoPathToUri = value; }
++
+ void ClipboardService::setMonitoring(bool value) {
+   if (m_monitoring == value) return;
+ 
+@@ -345,6 +349,82 @@ ClipboardSelection &ClipboardService::sanitizeSelection(ClipboardSelection &sele
    });
    std::ranges::unique(selection.offers, [](auto &&a, auto &&b) { return a.mimeType == b.mimeType; });
  
++  // Skip path-to-URI conversion if disabled
++  if (!m_autoPathToUri) return selection;
++
 +  // Check if there's already a text/uri-list with file:// URIs - if so, skip conversion
 +  bool alreadyHasFileUri = std::ranges::any_of(selection.offers, [](const auto &offer) {
 +    return offer.mimeType == "text/uri-list" &&
@@ -1167,7 +1254,7 @@ index 44401239..adbe0410 100644
    return selection;
  }
  
-@@ -545,6 +619,17 @@ bool ClipboardService::copySelection(const ClipboardSelection &selection,
+@@ -545,6 +625,17 @@ bool ClipboardService::copySelection(const ClipboardSelection &selection,
          qDebug() << "ClipboardService: Set image data with mime type" << offer.mimeType
                   << "size:" << offer.data.size();
        }
@@ -1185,7 +1272,7 @@ index 44401239..adbe0410 100644
      } else {
        if (Utils::isTextMimeType(offer.mimeType)) {
          mimeData->setText(QString::fromUtf8(offer.data));
-@@ -617,6 +702,133 @@ bool ClipboardService::removeAllSelections() {
+@@ -617,6 +708,133 @@ bool ClipboardService::removeAllSelections() {
    return true;
  }
  
@@ -1193,7 +1280,7 @@ index 44401239..adbe0410 100644
 +  QMimeData *composite = new QMimeData;
 +  QString combinedText;
 +  QString combinedHtml = "<div style=\"font-family: sans-serif;\">";
-+  QStringList fileUris;  // Collect file:// URIs for text/uri-list
++  QStringList fileUris;
 +  int imageCount = 0;
 +  QByteArray singleImageData;
 +  QString singleImageMime;
@@ -1319,11 +1406,49 @@ index 44401239..adbe0410 100644
  AbstractClipboardServer *ClipboardService::clipboardServer() const { return m_clipboardServer.get(); }
  
  ClipboardService::ClipboardService(const std::filesystem::path &path, WindowManager &wm, AppService &appDb)
+@@ -640,4 +858,29 @@ ClipboardService::ClipboardService(const std::filesystem::path &path, WindowMana
+ 
+   connect(m_clipboardServer.get(), &AbstractClipboardServer::selectionAdded, this,
+           &ClipboardService::saveSelection);
++
++  // Health check timer to auto-recover from KDE crashes
++  m_healthCheckTimer = new QTimer(this);
++  connect(m_healthCheckTimer, &QTimer::timeout, this, &ClipboardService::checkServerHealth);
++  m_healthCheckTimer->start(5000); // Check every 5 seconds
++}
++
++ClipboardService::~ClipboardService() {
++  if (m_healthCheckTimer) {
++    m_healthCheckTimer->stop();
++  }
++}
++
++void ClipboardService::checkServerHealth() {
++  if (!m_monitoring) return;
++
++  if (!m_clipboardServer->isAlive()) {
++    qWarning() << "Clipboard server" << m_clipboardServer->id() << "is not alive, attempting restart...";
++    m_clipboardServer->stop();
++    if (m_clipboardServer->start()) {
++      qInfo() << "Clipboard server" << m_clipboardServer->id() << "restarted successfully.";
++    } else {
++      qWarning() << "Failed to restart clipboard server" << m_clipboardServer->id();
++    }
++  }
+ }
 diff --git a/vicinae/src/services/clipboard/clipboard-service.hpp b/vicinae/src/services/clipboard/clipboard-service.hpp
-index 2283478b..237919e1 100644
+index 2283478b..38a80e2d 100644
 --- a/vicinae/src/services/clipboard/clipboard-service.hpp
 +++ b/vicinae/src/services/clipboard/clipboard-service.hpp
-@@ -124,6 +124,17 @@ public:
+@@ -92,6 +92,7 @@ public:
+   };
+ 
+   ClipboardService(const std::filesystem::path &path, WindowManager &wm, AppService &appDb);
++  ~ClipboardService();
+ 
+   static QString readText();
+   static Clipboard::ReadContent readContent();
+@@ -124,6 +125,17 @@ public:
    bool copySelection(const ClipboardSelection &selection, const Clipboard::CopyOptions &options);
    bool copyQMimeData(QMimeData *data, const Clipboard::CopyOptions &options = {});
  
@@ -1341,7 +1466,23 @@ index 2283478b..237919e1 100644
    /**
     * Whether we have a working clipboard server implementation to use.
     * This does not take into account the current monitoring preference, only
-@@ -166,6 +177,12 @@ private:
+@@ -134,6 +146,7 @@ public:
+   void setMonitoring(bool value);
+   void setEncryption(bool value);
+   void setIgnorePasswords(bool value);
++  void setAutoPathToUri(bool value);
+   bool isEncryptionReady() const;
+ 
+ private:
+@@ -159,17 +172,27 @@ private:
+    * Sanitize the passed selection by removing duplicate offers.
+    * The selection is sanitized in place, no copy is made.
+    */
+-  static ClipboardSelection &sanitizeSelection(ClipboardSelection &selection);
++  ClipboardSelection &sanitizeSelection(ClipboardSelection &selection);
+ 
+   std::expected<QByteArray, ClipboardService::OfferDecryptionError>
+   decryptOffer(const QByteArray &data, ClipboardEncryptionType type) const;
  
    static ClipboardOfferKind getKind(const ClipboardDataOffer &offer);
  
@@ -1354,6 +1495,14 @@ index 2283478b..237919e1 100644
    WindowManager &m_wm;
    AppService &m_appDb;
  
+   bool m_recordAllOffers = true;
+   bool m_monitoring = false;
+   bool m_ignorePasswords = true;
++  bool m_autoPathToUri = false;
++  QTimer *m_healthCheckTimer = nullptr;
++
++  void checkServerHealth();
+ };
 diff --git a/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp b/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp
 index fccdb6ff..9bb3de29 100644
 --- a/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp

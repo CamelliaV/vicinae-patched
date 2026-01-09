@@ -1,6 +1,6 @@
 pkgname=vicinae-patched
 _pkgname=vicinae
-pkgver=0.18.0
+pkgver=0.18.2
 pkgrel=1
 pkgdesc="Vicinae launcher with enhancements: multi-paste, paste as text, image preview, reveal in file explorer"
 arch=('x86_64')
@@ -41,8 +41,8 @@ source=(
   "vicinae-enhancements.patch"
 )
 sha256sums=(
-  'd5803164ded217ecc445b430401c09879445b674cc52158d0a8bfb476ff85557'
-  '444c2c1831075b41f4a358a83c9434ea7637e658a456da2f3f56c51f4b000b40'
+  'SKIP'
+  'SKIP'
 )
 
 prepare() {
@@ -52,9 +52,15 @@ prepare() {
 }
 
 build() {
+  export CFLAGS="${CFLAGS} -march=znver4 -mtune=znver4 -O3 -pipe -fno-plt -fexceptions -Wp,-D_FORTIFY_SOURCE=3 -Wformat -Werror=format-security -fstack-clash-protection -fcf-protection -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer"
+  export CXXFLAGS="${CXXFLAGS} -march=znver4 -mtune=znver4 -O3 -pipe -fno-plt -fexceptions -Wp,-D_FORTIFY_SOURCE=3 -Wformat -Werror=format-security -fstack-clash-protection -fcf-protection -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer"
+  export LDFLAGS="${LDFLAGS} -Wl,-O1 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,-z,pack-relative-relocs"
+
   cmake -S "${_pkgname}-${pkgver}" -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_C_FLAGS_RELEASE="${CFLAGS}" \
+    -DCMAKE_CXX_FLAGS_RELEASE="${CXXFLAGS}" \
     -DVICINAE_GIT_TAG="v${pkgver}" \
     -DVICINAE_GIT_COMMIT_HASH="arch" \
     -DVICINAE_PROVENANCE="arch" \
@@ -67,7 +73,8 @@ build() {
     -DUSE_SYSTEM_LAYER_SHELL=ON \
     -DUSE_SYSTEM_QT_KEYCHAIN=ON \
     -DUSE_SYSTEM_GLAZE=ON \
-    -DLIBQALCULATE_BACKEND=ON
+    -DLIBQALCULATE_BACKEND=ON \
+    -DLTO=ON
 
   cmake --build build
 }
