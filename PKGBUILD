@@ -1,6 +1,6 @@
 pkgname=vicinae-patched
 _pkgname=vicinae
-pkgver=0.18.2
+pkgver=0.18.3
 pkgrel=1
 pkgdesc="Vicinae launcher with enhancements: multi-paste, paste as text, image preview, reveal in file explorer"
 arch=('x86_64')
