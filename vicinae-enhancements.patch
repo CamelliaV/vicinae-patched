@@ -176,7 +176,7 @@ index c2031477..376f596b 100644
 +  std::vector<QString> m_multiSelectedIds;
  };
 diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp b/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
-index 72a89e9e..7946d978 100644
+index 72a89e9e..0bc63464 100644
 --- a/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
 +++ b/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
 @@ -1,9 +1,12 @@
@@ -1005,7 +1005,7 @@ index 72a89e9e..7946d978 100644
  void ClipboardHistoryView::handleMonitoringChanged(bool monitor) {
    if (monitor) {
      m_statusToolbar->setClipboardStatus(ClipboardStatusToolbar::ClipboardStatus::Monitoring);
-@@ -501,3 +1210,163 @@ std::optional<QString> ClipboardHistoryView::getSavedDropdownFilter() {
+@@ -501,3 +1210,166 @@ std::optional<QString> ClipboardHistoryView::getSavedDropdownFilter() {
  
    return value.toString();
  }
@@ -1026,6 +1026,7 @@ index 72a89e9e..7946d978 100644
 +    updateMultiSelectStatusText();
 +    m_model->setMultiSelectedIds(m_selectedIds);
 +  }
++  refreshCurrent();  // Refresh action panel
 +}
 +
 +void ClipboardHistoryView::toggleItemSelection(const QString &id) {
@@ -1097,6 +1098,7 @@ index 72a89e9e..7946d978 100644
 +      if (auto item = m_model->fromIndex(*idx)) {
 +        toggleItemSelection((*item)->id);
 +        updateMultiSelectStatusText();
++        refreshCurrent();  // Refresh action panel with updated selection
 +        return true;
 +      }
 +    }
@@ -1111,6 +1113,7 @@ index 72a89e9e..7946d978 100644
 +        }
 +        toggleItemSelection((*item)->id);
 +        updateMultiSelectStatusText();
++        refreshCurrent();  // Refresh action panel with updated selection
 +        return true;
 +      }
 +    }

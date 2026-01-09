@@ -1229,6 +1229,7 @@ void ClipboardHistoryView::toggleMultiSelectMode() {
     updateMultiSelectStatusText();
     m_model->setMultiSelectedIds(m_selectedIds);
   }
+  refreshCurrent();  // Refresh action panel
 }
 
 void ClipboardHistoryView::toggleItemSelection(const QString &id) {
@@ -1300,6 +1301,7 @@ bool ClipboardHistoryView::inputFilter(QKeyEvent *event) {
       if (auto item = m_model->fromIndex(*idx)) {
         toggleItemSelection((*item)->id);
         updateMultiSelectStatusText();
+        refreshCurrent();  // Refresh action panel with updated selection
         return true;
       }
     }
@@ -1314,6 +1316,7 @@ bool ClipboardHistoryView::inputFilter(QKeyEvent *event) {
         }
         toggleItemSelection((*item)->id);
         updateMultiSelectStatusText();
+        refreshCurrent();  // Refresh action panel with updated selection
         return true;
       }
     }
