@@ -36,6 +36,7 @@
 #include <qscrollarea.h>
 #include <qscrollbar.h>
 #include <qwidget.h>
+#include <QDesktopServices>
 #include <filesystem>
 #include <system_error>
 
@@ -656,6 +657,19 @@ public:
       : AbstractAction("Reveal in file explorer", ImageURL::builtin("folder")), m_id(id), m_path(path) {}
 };
 
+class OpenLinkInBrowserAction : public AbstractAction {
+  QString m_url;
+
+  void execute(ApplicationContext *ctx) override {
+    ctx->services->appDb()->launchRaw({"xdg-open", m_url});
+    ctx->navigation->closeWindow();
+  }
+
+public:
+  OpenLinkInBrowserAction(const QString &url)
+      : AbstractAction("Open in browser", ImageURL::builtin("link")), m_url(url) {}
+};
+
 class ToggleMultiSelectModeAction : public AbstractAction {
   ClipboardHistoryView &m_view;
 
@@ -1104,6 +1118,19 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const 
     }
   }
 
+  // Add open in browser action for Link items
+  if (info->kind == ClipboardOfferKind::Link) {
+    auto data = clipman->getMainOfferData(info->id);
+    if (data) {
+      QString text = QString::fromUtf8(data.value()).trimmed();
+      if (!text.isEmpty()) {
+        auto openLink = new OpenLinkInBrowserAction(text);
+        openLink->setShortcut(Keyboard::Shortcut(Qt::Key_R, Qt::ControlModifier | Qt::AltModifier));
+        toolsSection->addAction(openLink);
+      }
+    }
+  }
+
   toolsSection->addAction(pin);
   toolsSection->addAction(editKeywords);
   dangerSection->addAction(remove);
@@ -1240,6 +1267,33 @@ void ClipboardHistoryView::updateMultiSelectStatusText() {
 }
 
 bool ClipboardHistoryView::inputFilter(QKeyEvent *event) {
+  // Handle PageUp/PageDown for page scrolling
+  if (event->key() == Qt::Key_PageUp) {
+    int pageSize = std::max(1, static_cast<int>(m_list->visibleItems().size()) - 1);
+    if (auto idx = m_list->currentSelection()) {
+      int newIdx = std::max(0, *idx - pageSize);
+      m_list->setSelected(newIdx);
+    }
+    return true;
+  }
+  if (event->key() == Qt::Key_PageDown) {
+    int pageSize = std::max(1, static_cast<int>(m_list->visibleItems().size()) - 1);
+    if (auto idx = m_list->currentSelection()) {
+      m_list->setSelected(*idx + pageSize);
+    }
+    return true;
+  }
+
+  // Handle Home/End for jumping to first/last item
+  if (event->key() == Qt::Key_Home) {
+    m_list->selectFirst();
+    return true;
+  }
+  if (event->key() == Qt::Key_End) {
+    m_list->selectLast();
+    return true;
+  }
+
   // Handle Space for toggling selection in multi-select mode
   if (m_multiSelectMode && event->key() == Qt::Key_Space && event->modifiers() == Qt::NoModifier) {
     if (auto idx = m_list->currentSelection()) {
