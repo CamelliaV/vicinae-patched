@@ -33,6 +33,7 @@
 #include "services/window-manager/window-manager.hpp"
 
 namespace fs = std::filesystem;
+static constexpr const char *HEALTHCHECK_SERVER_ID = "data-control";
 
 /**
  * If any of these is found in a selection, we ignore the entire selection.
@@ -857,10 +858,12 @@ ClipboardService::ClipboardService(const std::filesystem::path &path, WindowMana
   connect(m_clipboardServer.get(), &AbstractClipboardServer::selectionAdded, this,
           &ClipboardService::saveSelection);
 
-  // Health check timer to auto-recover from KDE crashes
-  m_healthCheckTimer = new QTimer(this);
-  connect(m_healthCheckTimer, &QTimer::timeout, this, &ClipboardService::checkServerHealth);
-  m_healthCheckTimer->start(5000); // Check every 5 seconds
+  // Health checks are intended for the data-control backend (KDE/Wayland crash recovery).
+  if (m_clipboardServer && m_clipboardServer->id() == HEALTHCHECK_SERVER_ID) {
+    m_healthCheckTimer = new QTimer(this);
+    connect(m_healthCheckTimer, &QTimer::timeout, this, &ClipboardService::checkServerHealth);
+    m_healthCheckTimer->start(5000); // Check every 5 seconds
+  }
 }
 
 ClipboardService::~ClipboardService() {
@@ -870,7 +873,7 @@ ClipboardService::~ClipboardService() {
 }
 
 void ClipboardService::checkServerHealth() {
-  if (!m_monitoring) return;
+  if (!m_monitoring || !m_clipboardServer || m_clipboardServer->id() != HEALTHCHECK_SERVER_ID) return;
 
   if (!m_clipboardServer->isAlive()) {
     qWarning() << "Clipboard server" << m_clipboardServer->id() << "is not alive, attempting restart...";

@@ -1,3 +1,92 @@
+diff --git a/README.md b/README.md
+index 47505d98..bc68365a 100644
+--- a/README.md
++++ b/README.md
+@@ -1,53 +1,43 @@
+-<p align="center">
+-  <img
+-    width="100"
+-    src="extra/vicinae.png"
+-    alt="Vicinae text logo"
+-  />
+-</p>
++# Vicinae Patched
+ 
+-[![Discord](https://discord.com/api/guilds/1407488619765174273/widget.png?style=shield&nonce=1756955967)](https://discord.gg/rP4ecD42p7)
++A fork of [Vicinae](https://github.com/vicinaehq/vicinae) with additional enhancements for clipboard management.
+ 
+-**Vicinae** (pronounced _"vee-CHEE-nay"_) is a high-performance, native launcher for your desktop.
++## Enhancements
+ 
+-It comes with a rich set of built-in modules and can be easily extended using the [Typescript SDK](https://docs.vicinae.com/extensions/introduction).
++### Clipboard Multi-Select
++- **Range selection**: Shift+Click to select start item, Shift+Click again to select all items in range
++- **Single item toggle**: Ctrl+Click to select/deselect individual items (for non-adjacent selection)
++- **Multi-paste**: Enter to paste all selected items, Ctrl+Enter for reverse order
++- **Multi-delete**: Ctrl+X to delete all selected items at once
++- **Paste as text**: Ctrl+Shift+V to paste multiple items as combined text
+ 
+-Drawing inspiration from the [Raycast launcher](https://www.raycast.com/), Vicinae provides a mostly compatible extension API, allowing reuse of many existing Raycast extensions with minimal modification.
++### Navigation
++- **Page scrolling**: PageUp/PageDown to scroll by visible page size
++- **Jump to ends**: Home/End to jump to first/last item
+ 
+-Vicinae is designed for developers and power users who want fast, keyboard-first access to common system actions.
++### Clipboard Actions
++- **Open link in browser**: Ctrl+Alt+R to open copied links in default browser
++- **Auto path-to-URI toggle**: Option to auto-convert file paths to URIs (disabled by default)
++- **Auto-recovery**: Automatically restarts clipboard monitoring after KDE crashes
+ 
+-Check the [website](https://vicinae.com) ;)
++### Build Optimizations
++- Zen4 architecture optimizations (-march=znver4)
++- LTO enabled for better performance
+ 
+-<p align="center">
+-  <video alt="demo video" src="https://private-user-images.githubusercontent.com/72200344/499625615-b5831ba7-dd16-407e-a05c-c2dbb468a0d6.mp4?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NzAxNDI4NjEsIm5iZiI6MTc3MDE0MjU2MSwicGF0aCI6Ii83MjIwMDM0NC80OTk2MjU2MTUtYjU4MzFiYTctZGQxNi00MDdlLWEwNWMtYzJkYmI0NjhhMGQ2Lm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNjAyMDMlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjYwMjAzVDE4MTYwMVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWFhYjI5ZTJiMDkyYjliMDFjYWYzZDkxMmI5YWRhYmFkYzI0MzkzNjFmNjQzMDRmNjc2ZGRiMGVlNTlkOTViNTUmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.ksY1Ik5XC5xCp1K7rTg2XRlL_8-qk9E2WqzkeLjHrMo" />
+-</p>
++## Installation (Arch Linux)
+ 
+-## Features
++```bash
++git clone https://github.com/CamelliaV/vicinae-patched.git
++cd vicinae-patched
++makepkg -si
++```
+ 
+-- Launch apps
+-- File search
+-- Emoji picker 
+-- Calculator with history (multiple backends available)
+-- Clipboard history
+-- Quickly open links using any app (can be used to set up web search)
+-- Focus open windows
+-- script commands
+-- `dmenu` compatibility mode
+-- Theming system 
+-- Fallback commands
+-- React/Typescript extension SDK, allowing to build complex search-focused UIs
+-- Global [extension store](https://github.com/vicinaehq/extensions) (since v0.16.0)
+-- Raycast compatibility support  
+-  → Includes access to the official Raycast extension store, with one-click installs directly from within the launcher  
+-  → Many extensions may not work yet due to missing APIs or general Linux incompatibilities
++## Updating
+ 
++```bash
++./update.sh  # Checks upstream, updates PKGBUILD, rebuilds
++```
+ 
+-## Breaking changes
++## Original Project
+ 
+-Until we reach version 1 you should expect breaking changes from release to release. Watch the changelogs to learn about them.
+-
+-We try to not introduce breaking changes that result in a definitive loss of data, but you should expect to have to redo your configuration from time to time.
+-
+-## Documentation
+-
+-All you need to know is at [docs.vicinae.com](https://docs.vicinae.com).
++See the [original Vicinae repository](https://github.com/vicinaehq/vicinae) for full documentation and features.
 diff --git a/src/server/src/extension/extension-list-model.hpp b/src/server/src/extension/extension-list-model.hpp
 index 5889b4ac..24fed7e5 100644
 --- a/src/server/src/extension/extension-list-model.hpp
@@ -1274,7 +1363,7 @@ index 843d0c0b..5299a801 100644
  
      item->setTitle(theme->name());
 diff --git a/src/server/src/services/clipboard/clipboard-service.cpp b/src/server/src/services/clipboard/clipboard-service.cpp
-index b94c3b41..b00c687d 100644
+index b94c3b41..fcb1a7b7 100644
 --- a/src/server/src/services/clipboard/clipboard-service.cpp
 +++ b/src/server/src/services/clipboard/clipboard-service.cpp
 @@ -3,6 +3,7 @@
@@ -1293,7 +1382,15 @@ index b94c3b41..b00c687d 100644
  #include <qsqlquery.h>
  #include <qstringview.h>
  #include <qt6keychain/keychain.h>
-@@ -130,6 +132,8 @@ bool ClipboardService::isEncryptionReady() const { return m_encrypter.get(); }
+@@ -31,6 +33,7 @@
+ #include "services/window-manager/window-manager.hpp"
+ 
+ namespace fs = std::filesystem;
++static constexpr const char *HEALTHCHECK_SERVER_ID = "data-control";
+ 
+ /**
+  * If any of these is found in a selection, we ignore the entire selection.
+@@ -130,6 +133,8 @@ bool ClipboardService::isEncryptionReady() const { return m_encrypter.get(); }
  
  void ClipboardService::setIgnorePasswords(bool value) { m_ignorePasswords = value; }
  
@@ -1302,7 +1399,7 @@ index b94c3b41..b00c687d 100644
  void ClipboardService::setMonitoring(bool value) {
    if (m_monitoring == value) return;
  
-@@ -344,6 +348,82 @@ ClipboardSelection &ClipboardService::sanitizeSelection(ClipboardSelection &sele
+@@ -344,6 +349,82 @@ ClipboardSelection &ClipboardService::sanitizeSelection(ClipboardSelection &sele
    });
    std::ranges::unique(selection.offers, [](auto &&a, auto &&b) { return a.mimeType == b.mimeType; });
  
@@ -1385,7 +1482,7 @@ index b94c3b41..b00c687d 100644
    return selection;
  }
  
-@@ -544,6 +624,17 @@ bool ClipboardService::copySelection(const ClipboardSelection &selection,
+@@ -544,6 +625,17 @@ bool ClipboardService::copySelection(const ClipboardSelection &selection,
          qDebug() << "ClipboardService: Set image data with mime type" << offer.mimeType
                   << "size:" << offer.data.size();
        }
@@ -1403,7 +1500,7 @@ index b94c3b41..b00c687d 100644
      } else {
        if (Utils::isTextMimeType(offer.mimeType)) {
          mimeData->setText(QString::fromUtf8(offer.data));
-@@ -616,6 +707,133 @@ bool ClipboardService::removeAllSelections() {
+@@ -616,6 +708,133 @@ bool ClipboardService::removeAllSelections() {
    return true;
  }
  
@@ -1537,15 +1634,17 @@ index b94c3b41..b00c687d 100644
  AbstractClipboardServer *ClipboardService::clipboardServer() const { return m_clipboardServer.get(); }
  
  ClipboardService::ClipboardService(const std::filesystem::path &path, WindowManager &wm, AppService &appDb)
-@@ -638,4 +856,29 @@ ClipboardService::ClipboardService(const std::filesystem::path &path, WindowMana
+@@ -638,4 +857,31 @@ ClipboardService::ClipboardService(const std::filesystem::path &path, WindowMana
  
    connect(m_clipboardServer.get(), &AbstractClipboardServer::selectionAdded, this,
            &ClipboardService::saveSelection);
 +
-+  // Health check timer to auto-recover from KDE crashes
-+  m_healthCheckTimer = new QTimer(this);
-+  connect(m_healthCheckTimer, &QTimer::timeout, this, &ClipboardService::checkServerHealth);
-+  m_healthCheckTimer->start(5000); // Check every 5 seconds
++  // Health checks are intended for the data-control backend (KDE/Wayland crash recovery).
++  if (m_clipboardServer && m_clipboardServer->id() == HEALTHCHECK_SERVER_ID) {
++    m_healthCheckTimer = new QTimer(this);
++    connect(m_healthCheckTimer, &QTimer::timeout, this, &ClipboardService::checkServerHealth);
++    m_healthCheckTimer->start(5000); // Check every 5 seconds
++  }
 +}
 +
 +ClipboardService::~ClipboardService() {
@@ -1555,7 +1654,7 @@ index b94c3b41..b00c687d 100644
 +}
 +
 +void ClipboardService::checkServerHealth() {
-+  if (!m_monitoring) return;
++  if (!m_monitoring || !m_clipboardServer || m_clipboardServer->id() != HEALTHCHECK_SERVER_ID) return;
 +
 +  if (!m_clipboardServer->isAlive()) {
 +    qWarning() << "Clipboard server" << m_clipboardServer->id() << "is not alive, attempting restart...";
