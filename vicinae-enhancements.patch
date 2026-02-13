@@ -1,8 +1,8 @@
-diff --git a/vicinae/src/extension/extension-list-model.hpp b/vicinae/src/extension/extension-list-model.hpp
-index c55d0c91..4325aa4f 100644
---- a/vicinae/src/extension/extension-list-model.hpp
-+++ b/vicinae/src/extension/extension-list-model.hpp
-@@ -91,7 +91,7 @@ protected:
+diff --git a/src/server/src/extension/extension-list-model.hpp b/src/server/src/extension/extension-list-model.hpp
+index 5889b4ac..24fed7e5 100644
+--- a/src/server/src/extension/extension-list-model.hpp
++++ b/src/server/src/extension/extension-list-model.hpp
+@@ -92,7 +92,7 @@ protected:
    WidgetType *createItemWidget(const ListItemViewModel *const &type) const override {
      return new DefaultListItemWidget;
    }
@@ -11,11 +11,11 @@ index c55d0c91..4325aa4f 100644
      auto w = static_cast<DefaultListItemWidget *>(widget);
      w->setName(type->title.c_str());
      w->setSubtitle(type->subtitle);
-diff --git a/vicinae/src/extensions/clipboard/clipboard-extension.cpp b/vicinae/src/extensions/clipboard/clipboard-extension.cpp
-index 86da0231..01e02352 100644
---- a/vicinae/src/extensions/clipboard/clipboard-extension.cpp
-+++ b/vicinae/src/extensions/clipboard/clipboard-extension.cpp
-@@ -43,6 +43,7 @@ void ClipboardExtension::preferenceValuesChanged(const QJsonObject &value) const
+diff --git a/src/server/src/extensions/clipboard/clipboard-extension.cpp b/src/server/src/extensions/clipboard/clipboard-extension.cpp
+index 5107f98b..0d2e6d25 100644
+--- a/src/server/src/extensions/clipboard/clipboard-extension.cpp
++++ b/src/server/src/extensions/clipboard/clipboard-extension.cpp
+@@ -70,6 +70,7 @@ void ClipboardExtension::preferenceValuesChanged(const QJsonObject &value) const
    clipman->setMonitoring(value.value("monitoring").toBool());
    clipman->setEncryption(value.value("encryption").toBool());
    clipman->setIgnorePasswords(value.value("ignorePasswords").toBool());
@@ -23,7 +23,7 @@ index 86da0231..01e02352 100644
  }
  
  std::vector<Preference> ClipboardExtension::preferences() const {
-@@ -50,6 +51,7 @@ std::vector<Preference> ClipboardExtension::preferences() const {
+@@ -77,6 +78,7 @@ std::vector<Preference> ClipboardExtension::preferences() const {
    auto monitoring = Preference::makeCheckbox("monitoring");
    auto eraseOnStartup = Preference::makeCheckbox("eraseOnStartup");
    auto ignorePasswords = Preference::makeCheckbox("ignorePasswords");
@@ -31,7 +31,7 @@ index 86da0231..01e02352 100644
  
    eraseOnStartup.setTitle("Erase on startup");
    eraseOnStartup.setDescription("Erase clipboard history every time the vicinae server is started");
-@@ -73,5 +75,10 @@ std::vector<Preference> ClipboardExtension::preferences() const {
+@@ -100,5 +102,10 @@ std::vector<Preference> ClipboardExtension::preferences() const {
                              "performed while this is turned off will not be recorded.");
    monitoring.setDefaultValue(true);
  
@@ -43,10 +43,10 @@ index 86da0231..01e02352 100644
 +
 +  return {monitoring, ignorePasswords, eraseOnStartup, encryption, autoPathToUri};
  }
-diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp b/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp
+diff --git a/src/server/src/extensions/clipboard/history/clipboard-history-model.hpp b/src/server/src/extensions/clipboard/history/clipboard-history-model.hpp
 index c2031477..376f596b 100644
---- a/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp
-+++ b/vicinae/src/extensions/clipboard/history/clipboard-history-model.hpp
+--- a/src/server/src/extensions/clipboard/history/clipboard-history-model.hpp
++++ b/src/server/src/extensions/clipboard/history/clipboard-history-model.hpp
 @@ -6,25 +6,56 @@
  #include "ui/vlist/common/section-model.hpp"
  #include "ui/vlist/vlist.hpp"
@@ -175,10 +175,10 @@ index c2031477..376f596b 100644
    PaginatedResponse<ClipboardHistoryEntry> m_res;
 +  std::vector<QString> m_multiSelectedIds;
  };
-diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp b/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
-index 72a89e9e..0bc63464 100644
---- a/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
-+++ b/vicinae/src/extensions/clipboard/history/clipboard-history-view.cpp
+diff --git a/src/server/src/extensions/clipboard/history/clipboard-history-view.cpp b/src/server/src/extensions/clipboard/history/clipboard-history-view.cpp
+index b29ca42f..5f9f35fb 100644
+--- a/src/server/src/extensions/clipboard/history/clipboard-history-view.cpp
++++ b/src/server/src/extensions/clipboard/history/clipboard-history-view.cpp
 @@ -1,9 +1,12 @@
  #include "clipboard-history-view.hpp"
  #include "actions/root-search/root-search-actions.hpp"
@@ -768,7 +768,7 @@ index 72a89e9e..0bc63464 100644
  class RemoveAllSelectionsAction : public AbstractAction {
    void execute(ApplicationContext *ctx) override {
      auto alert = new CallbackAlertWidget();
-@@ -389,6 +905,52 @@ void ClipboardHistoryView::initialize() {
+@@ -391,6 +907,52 @@ void ClipboardHistoryView::initialize() {
            [this](const PaginatedResponse<ClipboardHistoryEntry> &page) {
              m_statusToolbar->setLeftText(QString("%1 Items").arg(page.totalCount));
            });
@@ -821,7 +821,7 @@ index 72a89e9e..0bc63464 100644
  }
  
  std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const ItemType &info) const {
-@@ -411,28 +973,162 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const
+@@ -413,28 +975,162 @@ std::unique_ptr<ActionPanelState> ClipboardHistoryView::createActionPanel(const
    removeAll->setShortcut(Keybind::DangerousRemoveAction);
    pin->setShortcut(Keybind::PinAction);
  
@@ -985,7 +985,7 @@ index 72a89e9e..0bc63464 100644
    toolsSection->addAction(pin);
    toolsSection->addAction(editKeywords);
    dangerSection->addAction(remove);
-@@ -452,6 +1148,19 @@ void ClipboardHistoryView::textChanged(const QString &value) {
+@@ -454,6 +1150,19 @@ void ClipboardHistoryView::textChanged(const QString &value) {
    m_list->selectFirst();
  }
  
@@ -1005,7 +1005,7 @@ index 72a89e9e..0bc63464 100644
  void ClipboardHistoryView::handleMonitoringChanged(bool monitor) {
    if (monitor) {
      m_statusToolbar->setClipboardStatus(ClipboardStatusToolbar::ClipboardStatus::Monitoring);
-@@ -501,3 +1210,166 @@ std::optional<QString> ClipboardHistoryView::getSavedDropdownFilter() {
+@@ -503,3 +1212,166 @@ std::optional<QString> ClipboardHistoryView::getSavedDropdownFilter() {
  
    return value.toString();
  }
@@ -1172,10 +1172,10 @@ index 72a89e9e..0bc63464 100644
 +}
 +
 +#include "clipboard-history-view.moc"
-diff --git a/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp b/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp
+diff --git a/src/server/src/extensions/clipboard/history/clipboard-history-view.hpp b/src/server/src/extensions/clipboard/history/clipboard-history-view.hpp
 index f472c0cc..a4e73efb 100644
---- a/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp
-+++ b/vicinae/src/extensions/clipboard/history/clipboard-history-view.hpp
+--- a/src/server/src/extensions/clipboard/history/clipboard-history-view.hpp
++++ b/src/server/src/extensions/clipboard/history/clipboard-history-view.hpp
 @@ -104,10 +104,22 @@ public:
  
    void initialize() override;
@@ -1216,23 +1216,28 @@ index f472c0cc..a4e73efb 100644
 +  std::vector<QString> m_selectedIds;
 +  int m_rangeAnchorIndex = -1;  // For Shift+Click range selection
  };
-diff --git a/vicinae/src/extensions/file/search/file-search-model.hpp b/vicinae/src/extensions/file/search/file-search-model.hpp
-index d3e610f9..9fb80fd0 100644
---- a/vicinae/src/extensions/file/search/file-search-model.hpp
-+++ b/vicinae/src/extensions/file/search/file-search-model.hpp
-@@ -49,7 +49,7 @@ public:
-   WidgetType *createItemWidget(const std::filesystem::path &type) const override {
-     return new DefaultListItemWidget;
+diff --git a/src/server/src/extensions/file/search/file-search-model.hpp b/src/server/src/extensions/file/search/file-search-model.hpp
+index eb200309..6cd3cc67 100644
+--- a/src/server/src/extensions/file/search/file-search-model.hpp
++++ b/src/server/src/extensions/file/search/file-search-model.hpp
+@@ -43,10 +43,13 @@ public:
+     return std::hash<std::filesystem::path>{}(item);
    }
--  void refreshItemWidget(const std::filesystem::path &path, WidgetType *widget) const override {
-+  void refreshItemWidget(const std::filesystem::path &path, WidgetType *widget, int index) const override {
-     auto w = static_cast<DefaultListItemWidget *>(widget);
-     w->setIconUrl(ImageURL::fileIcon(path));
-     w->setName(getLastPathComponent(path).c_str());
-diff --git a/vicinae/src/extensions/root/root-search-model.cpp b/vicinae/src/extensions/root/root-search-model.cpp
-index 4e339937..547e0e0e 100644
---- a/vicinae/src/extensions/root/root-search-model.cpp
-+++ b/vicinae/src/extensions/root/root-search-model.cpp
+ 
++  WidgetTag widgetTag(const std::filesystem::path &item) const override { return 1; }
++
+   ItemData createItemData(const std::filesystem::path &path) const override {
+     return ItemData{
+         .title = getLastPathComponent(path).c_str(),
+         .icon = ImageURL::fileIcon(path),
++        .isActive = false,
+     };
+   }
+ 
+diff --git a/src/server/src/extensions/root/root-search-model.cpp b/src/server/src/extensions/root/root-search-model.cpp
+index 91e958fd..0cb05ad1 100644
+--- a/src/server/src/extensions/root/root-search-model.cpp
++++ b/src/server/src/extensions/root/root-search-model.cpp
 @@ -158,7 +158,7 @@ RootSearchModel::WidgetType *RootSearchModel::createItemWidget(const RootItemVar
    return std::visit(visitor, type);
  }
@@ -1242,11 +1247,11 @@ index 4e339937..547e0e0e 100644
    auto refreshRootItem = [&](const RootItem *item, bool showAlias = true) {
      auto w = static_cast<DefaultListItemWidget *>(widget);
      w->setAlias(showAlias ? m_manager->itemMetadata(item->uniqueId()).alias.value_or("").c_str() : "");
-diff --git a/vicinae/src/extensions/root/root-search-model.hpp b/vicinae/src/extensions/root/root-search-model.hpp
-index 068aa713..1d229dbe 100644
---- a/vicinae/src/extensions/root/root-search-model.hpp
-+++ b/vicinae/src/extensions/root/root-search-model.hpp
-@@ -86,7 +86,7 @@ protected:
+diff --git a/src/server/src/extensions/root/root-search-model.hpp b/src/server/src/extensions/root/root-search-model.hpp
+index bbe6bb3c..3be513c5 100644
+--- a/src/server/src/extensions/root/root-search-model.hpp
++++ b/src/server/src/extensions/root/root-search-model.hpp
+@@ -88,7 +88,7 @@ protected:
  
    WidgetType *createItemWidget(const RootItemVariant &type) const override;
  
@@ -1255,10 +1260,10 @@ index 068aa713..1d229dbe 100644
  
  private:
    static constexpr const size_t ITEM_HEIGHT = 41;
-diff --git a/vicinae/src/extensions/theme/manage/theme-list-model.hpp b/vicinae/src/extensions/theme/manage/theme-list-model.hpp
+diff --git a/src/server/src/extensions/theme/manage/theme-list-model.hpp b/src/server/src/extensions/theme/manage/theme-list-model.hpp
 index 843d0c0b..5299a801 100644
---- a/vicinae/src/extensions/theme/manage/theme-list-model.hpp
-+++ b/vicinae/src/extensions/theme/manage/theme-list-model.hpp
+--- a/src/server/src/extensions/theme/manage/theme-list-model.hpp
++++ b/src/server/src/extensions/theme/manage/theme-list-model.hpp
 @@ -110,7 +110,7 @@ public:
  
    WidgetType *createItemWidget(const Item &type) const override { return new ThemeItemWidget; }
@@ -1268,10 +1273,10 @@ index 843d0c0b..5299a801 100644
      auto item = static_cast<ThemeItemWidget *>(widget);
  
      item->setTitle(theme->name());
-diff --git a/vicinae/src/services/clipboard/clipboard-service.cpp b/vicinae/src/services/clipboard/clipboard-service.cpp
-index 44401239..3acf070e 100644
---- a/vicinae/src/services/clipboard/clipboard-service.cpp
-+++ b/vicinae/src/services/clipboard/clipboard-service.cpp
+diff --git a/src/server/src/services/clipboard/clipboard-service.cpp b/src/server/src/services/clipboard/clipboard-service.cpp
+index b94c3b41..b00c687d 100644
+--- a/src/server/src/services/clipboard/clipboard-service.cpp
++++ b/src/server/src/services/clipboard/clipboard-service.cpp
 @@ -3,6 +3,7 @@
  #include <filesystem>
  #include <numeric>
@@ -1288,7 +1293,7 @@ index 44401239..3acf070e 100644
  #include <qsqlquery.h>
  #include <qstringview.h>
  #include <qt6keychain/keychain.h>
-@@ -131,6 +133,8 @@ bool ClipboardService::isEncryptionReady() const { return m_encrypter.get(); }
+@@ -130,6 +132,8 @@ bool ClipboardService::isEncryptionReady() const { return m_encrypter.get(); }
  
  void ClipboardService::setIgnorePasswords(bool value) { m_ignorePasswords = value; }
  
@@ -1297,7 +1302,7 @@ index 44401239..3acf070e 100644
  void ClipboardService::setMonitoring(bool value) {
    if (m_monitoring == value) return;
  
-@@ -345,6 +349,82 @@ ClipboardSelection &ClipboardService::sanitizeSelection(ClipboardSelection &sele
+@@ -344,6 +348,82 @@ ClipboardSelection &ClipboardService::sanitizeSelection(ClipboardSelection &sele
    });
    std::ranges::unique(selection.offers, [](auto &&a, auto &&b) { return a.mimeType == b.mimeType; });
  
@@ -1380,7 +1385,7 @@ index 44401239..3acf070e 100644
    return selection;
  }
  
-@@ -545,6 +625,17 @@ bool ClipboardService::copySelection(const ClipboardSelection &selection,
+@@ -544,6 +624,17 @@ bool ClipboardService::copySelection(const ClipboardSelection &selection,
          qDebug() << "ClipboardService: Set image data with mime type" << offer.mimeType
                   << "size:" << offer.data.size();
        }
@@ -1398,7 +1403,7 @@ index 44401239..3acf070e 100644
      } else {
        if (Utils::isTextMimeType(offer.mimeType)) {
          mimeData->setText(QString::fromUtf8(offer.data));
-@@ -617,6 +708,133 @@ bool ClipboardService::removeAllSelections() {
+@@ -616,6 +707,133 @@ bool ClipboardService::removeAllSelections() {
    return true;
  }
  
@@ -1532,7 +1537,7 @@ index 44401239..3acf070e 100644
  AbstractClipboardServer *ClipboardService::clipboardServer() const { return m_clipboardServer.get(); }
  
  ClipboardService::ClipboardService(const std::filesystem::path &path, WindowManager &wm, AppService &appDb)
-@@ -640,4 +858,29 @@ ClipboardService::ClipboardService(const std::filesystem::path &path, WindowMana
+@@ -638,4 +856,29 @@ ClipboardService::ClipboardService(const std::filesystem::path &path, WindowMana
  
    connect(m_clipboardServer.get(), &AbstractClipboardServer::selectionAdded, this,
            &ClipboardService::saveSelection);
@@ -1562,10 +1567,10 @@ index 44401239..3acf070e 100644
 +    }
 +  }
  }
-diff --git a/vicinae/src/services/clipboard/clipboard-service.hpp b/vicinae/src/services/clipboard/clipboard-service.hpp
+diff --git a/src/server/src/services/clipboard/clipboard-service.hpp b/src/server/src/services/clipboard/clipboard-service.hpp
 index 2283478b..38a80e2d 100644
---- a/vicinae/src/services/clipboard/clipboard-service.hpp
-+++ b/vicinae/src/services/clipboard/clipboard-service.hpp
+--- a/src/server/src/services/clipboard/clipboard-service.hpp
++++ b/src/server/src/services/clipboard/clipboard-service.hpp
 @@ -92,6 +92,7 @@ public:
    };
  
@@ -1629,10 +1634,10 @@ index 2283478b..38a80e2d 100644
 +
 +  void checkServerHealth();
  };
-diff --git a/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp b/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp
+diff --git a/src/server/src/ui/text-file-viewer/text-file-viewer.cpp b/src/server/src/ui/text-file-viewer/text-file-viewer.cpp
 index fccdb6ff..9bb3de29 100644
---- a/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp
-+++ b/vicinae/src/ui/text-file-viewer/text-file-viewer.cpp
+--- a/src/server/src/ui/text-file-viewer/text-file-viewer.cpp
++++ b/src/server/src/ui/text-file-viewer/text-file-viewer.cpp
 @@ -32,11 +32,12 @@ void TextFileViewer::updateStyle() {
  
  TextFileViewer::TextFileViewer() : edit(new QTextEdit()) {
@@ -1647,10 +1652,10 @@ index fccdb6ff..9bb3de29 100644
    updateStyle();
    VStack().add(edit).imbue(this);
    connect(&ThemeService::instance(), &ThemeService::themeChanged, this, [this]() { updateStyle(); });
-diff --git a/vicinae/src/ui/thumbnail/thumbnail.cpp b/vicinae/src/ui/thumbnail/thumbnail.cpp
+diff --git a/src/server/src/ui/thumbnail/thumbnail.cpp b/src/server/src/ui/thumbnail/thumbnail.cpp
 index 2440a504..f4a0d03f 100644
---- a/vicinae/src/ui/thumbnail/thumbnail.cpp
-+++ b/vicinae/src/ui/thumbnail/thumbnail.cpp
+--- a/src/server/src/ui/thumbnail/thumbnail.cpp
++++ b/src/server/src/ui/thumbnail/thumbnail.cpp
 @@ -1,5 +1,21 @@
  #include "thumbnail.hpp"
  
@@ -1707,10 +1712,10 @@ index 2440a504..f4a0d03f 100644
 +  m_thumbnail->setFrameVisible(false);
    m_thumbnail->setImage(icon);
  }
-diff --git a/vicinae/src/ui/thumbnail/thumbnail.hpp b/vicinae/src/ui/thumbnail/thumbnail.hpp
+diff --git a/src/server/src/ui/thumbnail/thumbnail.hpp b/src/server/src/ui/thumbnail/thumbnail.hpp
 index 431b80a3..3cda84db 100644
---- a/vicinae/src/ui/thumbnail/thumbnail.hpp
-+++ b/vicinae/src/ui/thumbnail/thumbnail.hpp
+--- a/src/server/src/ui/thumbnail/thumbnail.hpp
++++ b/src/server/src/ui/thumbnail/thumbnail.hpp
 @@ -20,6 +20,7 @@ class Thumbnail : public QWidget {
    ImageWidget *m_content = new ImageWidget(this);
    ImageWidget *m_placeholder = new ImageWidget(this);
@@ -1737,11 +1742,11 @@ index 431b80a3..3cda84db 100644
    void resizeEvent(QResizeEvent *event) override;
    QSize sizeHint() const override;
    QSize minimumSizeHint() const override;
-diff --git a/vicinae/src/ui/vlist/common/section-model.hpp b/vicinae/src/ui/vlist/common/section-model.hpp
-index 495b156d..a3825090 100644
---- a/vicinae/src/ui/vlist/common/section-model.hpp
-+++ b/vicinae/src/ui/vlist/common/section-model.hpp
-@@ -26,7 +26,7 @@ public:
+diff --git a/src/server/src/ui/vlist/common/section-model.hpp b/src/server/src/ui/vlist/common/section-model.hpp
+index 5178c01e..91f4a78a 100644
+--- a/src/server/src/ui/vlist/common/section-model.hpp
++++ b/src/server/src/ui/vlist/common/section-model.hpp
+@@ -27,7 +27,7 @@ public:
    virtual std::string_view sectionName(SectionId id) const = 0;
  
    virtual WidgetType *createItemWidget(const ItemType &type) const = 0;
@@ -1750,7 +1755,7 @@ index 495b156d..a3825090 100644
  
    virtual StableID stableId(const ItemType &item) const = 0;
    virtual WidgetTag widgetTag(const ItemType &item) const { return InvalidTag; }
-@@ -127,7 +127,7 @@ protected:
+@@ -130,7 +130,7 @@ protected:
                                       static_cast<OmniListSectionHeader *>(widget)->setTitle(
                                           parseSectionName(header.name, header.count));
                                     },
@@ -1759,11 +1764,11 @@ index 495b156d..a3825090 100644
      return std::visit(visitor, fromFlatIndex(idx));
    }
  
-diff --git a/vicinae/src/ui/vlist/common/vertical-list-model.hpp b/vicinae/src/ui/vlist/common/vertical-list-model.hpp
-index 741a9ea4..1dca9f14 100644
---- a/vicinae/src/ui/vlist/common/vertical-list-model.hpp
-+++ b/vicinae/src/ui/vlist/common/vertical-list-model.hpp
-@@ -38,7 +38,7 @@ public:
+diff --git a/src/server/src/ui/vlist/common/vertical-list-model.hpp b/src/server/src/ui/vlist/common/vertical-list-model.hpp
+index c64bca1f..cd8f5065 100644
+--- a/src/server/src/ui/vlist/common/vertical-list-model.hpp
++++ b/src/server/src/ui/vlist/common/vertical-list-model.hpp
+@@ -39,7 +39,7 @@ public:
      return new DefaultListItemWidget;
    }
  
